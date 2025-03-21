@@ -1,40 +1,22 @@
 import { createClient } from '@supabase/supabase-js';
-import { Database } from '@/types/supabase';
-
-// Temporary direct configuration while we debug env variable loading
-// These values should match what's in your .env.local
-const DIRECT_SUPABASE_URL = 'https://thvgjcnrlfofioagjydk.supabase.co';
-const DIRECT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRodmdqY25ybGZvZmlvYWdqeWRrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyNjYzMDAsImV4cCI6MjA1Njg0MjMwMH0.OmWI-itN_xok_fKFxfID1ew7sKO843-jsylapBCqvvg';
+import type { Database } from '@/types/database';
 
 // Get environment variables with proper error handling
 function getSupabaseConfig() {
   const url = import.meta.env.VITE_SUPABASE_URL;
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
   
-  // Debug info to help troubleshoot env variable issues
-  console.debug('Environment variables state:', {
-    mode: import.meta.env.MODE,
-    hasUrl: !!url,
-    hasKey: !!key,
-    envKeys: Object.keys(import.meta.env)
-      .filter(key => key.startsWith('VITE_'))
-      .join(', '),
-    usingFallback: !url || !key
-  });
+  if (!url || !key) {
+    throw new Error('Missing required Supabase environment variables. Please check your .env file and Vercel environment settings.');
+  }
   
-  // Use environment variables if available, otherwise fall back to direct values
-  return { 
-    url: url || DIRECT_SUPABASE_URL, 
-    key: key || DIRECT_SUPABASE_KEY 
-  };
+  return { url, key };
 }
 
 // Create a function to initialize the client
 function createSupabaseClient() {
   try {
     const { url, key } = getSupabaseConfig();
-    
-    console.log('Initializing Supabase client with URL:', url.substring(0, 15) + '...');
     
     return createClient<Database>(url, key, {
       auth: {
@@ -57,12 +39,26 @@ function createSupabaseClient() {
     });
   } catch (error) {
     console.error('Failed to initialize Supabase client:', error);
+    // Return a dummy client that throws errors for all operations in development
+    if (import.meta.env.DEV) {
+      return new Proxy({} as any, {
+        get: () => () => {
+          throw new Error('Supabase client not properly initialized. Check your environment variables.');
+        }
+      });
+    }
     throw error;
   }
 }
 
 // Initialize and export the client
 export const supabase = createSupabaseClient();
+
+// Export type helper
+export type SupabaseClient = ReturnType<typeof createSupabaseClient>;
+
+// Export database type
+export type { Database };
 
 // Auth helpers
 export const signUp = async ({ email, password }: { email: string; password: string }) => {

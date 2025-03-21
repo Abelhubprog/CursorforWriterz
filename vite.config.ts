@@ -2,29 +2,13 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Configure Vite to use .env.local file with higher priority
 export default defineConfig(({ mode }) => {
-  // Explicitly load environment variables
+  // Load environment variables
   const env = loadEnv(mode, process.cwd(), '');
-  
-  // Log env loading process (debug only)
-  console.log(`Loading environment for mode: ${mode}`);
-  
-  // Check for .env files
-  const envFiles = ['.env', '.env.local', `.env.${mode}`];
-  envFiles.forEach(file => {
-    try {
-      if (fs.existsSync(path.join(__dirname, file))) {
-        console.log(`Found ${file}`);
-      }
-    } catch (e) {
-      console.log(`Error checking for ${file}:`, e);
-    }
-  });
 
   return {
     plugins: [react()],
@@ -39,18 +23,13 @@ export default defineConfig(({ mode }) => {
         '@/hooks': path.resolve(__dirname, './src/hooks'),
         '@/contexts': path.resolve(__dirname, './src/contexts'),
         '@/services': path.resolve(__dirname, './src/services'),
-        '@/assets': path.resolve(__dirname, './src/assets')
+        '@/assets': path.resolve(__dirname, './src/assets'),
+        '@/admin': path.resolve(__dirname, './src/admin')
       },
     },
-    // Define environment variables
     define: {
-      // Expose loaded env vars to the client
-      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(
-        env.VITE_SUPABASE_URL || 'https://thvgjcnrlfofioagjydk.supabase.co'
-      ),
-      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(
-        env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRodmdqY25ybGZvZmlvYWdqeWRrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyNjYzMDAsImV4cCI6MjA1Njg0MjMwMH0.OmWI-itN_xok_fKFxfID1ew7sKO843-jsylapBCqvvg'
-      ),
+      // Make environment variables available to the app
+      'import.meta.env': JSON.stringify(env)
     },
     server: {
       port: 3000,
@@ -80,7 +59,9 @@ export default defineConfig(({ mode }) => {
         'react-dom',
         'class-variance-authority',
         'clsx',
-        'tailwind-merge'
+        'tailwind-merge',
+        '@clerk/clerk-react',
+        '@supabase/supabase-js'
       ],
     },
   };

@@ -1,9 +1,17 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import { Router } from 'express';
+
+// Extended Request interface with user property
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    [key: string]: any;
+  };
+}
 
 const router = Router();
 
-router.post('/api/create-charge', async (req, res) => {
+router.post('/api/create-charge', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { amount } = req.body;
     
