@@ -9,7 +9,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig(({ mode }) => {
   // Load environment variables
   const env = loadEnv(mode, process.cwd(), '');
-
+  
+  console.log(`Building for ${mode} mode`);
+  
   return {
     plugins: [react()],
     resolve: {
@@ -37,7 +39,11 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
-      sourcemap: true,
+      sourcemap: mode !== 'production',
+      minify: mode === 'production',
+      target: 'esnext',
+      assetsDir: 'assets',
+      emptyOutDir: true,
       rollupOptions: {
         output: {
           manualChunks: {
@@ -50,6 +56,9 @@ export default defineConfig(({ mode }) => {
               '@/components/ui/label',
             ],
           },
+          entryFileNames: 'assets/[name].[hash].js',
+          chunkFileNames: 'assets/[name].[hash].js',
+          assetFileNames: 'assets/[name].[hash].[ext]'
         },
       },
     },
