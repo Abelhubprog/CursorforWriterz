@@ -9,10 +9,11 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "(vite build || true) && node scripts/ensure-build.js",
+    "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "vercel-build": "node scripts/vercel-build.js"
   },
   "dependencies": {
     "@clerk/clerk-react": "^4.30.6",

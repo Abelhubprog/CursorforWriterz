@@ -1,8 +1,9 @@
 {
   "version": 2,
-  "framework": "vite",
-  "buildCommand": "node scripts/vercel-prepare.js && pnpm run build && node scripts/ensure-build.js",
+  "buildCommand": "pnpm vercel-build",
+  "installCommand": "pnpm install --frozen-lockfile",
   "outputDirectory": "dist",
+  "framework": null,
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],
@@ -15,15 +16,13 @@
     }
   ],
   "env": {
-    "VITE_SUPABASE_URL": "@vite_supabase_url",
-    "VITE_SUPABASE_ANON_KEY": "@vite_supabase_anon_key",
-    "VITE_CLERK_PUBLISHABLE_KEY": "@vite_clerk_publishable_key"
-  },
-  "build": {
-    "env": {
-      "VITE_SUPABASE_URL": "@vite_supabase_url",
-      "VITE_SUPABASE_ANON_KEY": "@vite_supabase_anon_key",
-      "VITE_CLERK_PUBLISHABLE_KEY": "@vite_clerk_publishable_key"
-    }
+    "VITE_SUPABASE_URL": "@supabase_url",
+    "VITE_SUPABASE_ANON_KEY": "@supabase_anon_key",
+    "VITE_CLERK_PUBLISHABLE_KEY": "@clerk_publishable_key",
+    "VITE_APP_URL": "@app_url",
+    "VITE_APP_NAME": "HandyWriterz",
+    "VITE_ENABLE_PUBLIC_ACCESS": "true",
+    "VITE_ENABLE_QUERY_CACHING": "true",
+    "NODE_ENV": "production"
   }
 } 
