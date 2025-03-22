@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
+  // Load environment variables
   const env = loadEnv(mode, process.cwd(), '');
   
   console.log(`Building for ${mode} mode`);
@@ -28,18 +29,22 @@ export default defineConfig(({ mode }) => {
         '@/admin': path.resolve(__dirname, './src/admin')
       }
     },
+    // Improve environment variable handling
     define: {
-      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
-      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
-      'import.meta.env.VITE_CLERK_PUBLISHABLE_KEY': JSON.stringify(env.VITE_CLERK_PUBLISHABLE_KEY),
+      // Only include required environment variables
+      __APP_ENV__: JSON.stringify(mode),
     },
     build: {
       outDir: 'dist',
-      sourcemap: true,
-      minify: true,
+      sourcemap: mode !== 'production', // Only generate sourcemaps in development
+      minify: 'esbuild',
       // Don't fail on warnings
       reportCompressedSize: false,
       chunkSizeWarningLimit: 1600,
+      // Ensure proper SSR handling
+      ssrManifest: false,
+      // Improve error handling
+      emptyOutDir: true,
       rollupOptions: {
         output: {
           manualChunks: {
@@ -65,7 +70,9 @@ export default defineConfig(({ mode }) => {
         'tailwind-merge',
         '@clerk/clerk-react',
         '@supabase/supabase-js'
-      ]
+      ],
+      // Force include problematic dependencies
+      force: true
     },
     server: {
       port: 5173,
