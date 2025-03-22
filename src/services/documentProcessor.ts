@@ -1,5 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { v4 as uuidv4 } from 'uuid';
+import prisma from '../lib/prisma';
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN!);
 
@@ -15,10 +16,12 @@ export async function processDocument(file: File): Promise<ProcessingResult> {
   const fileBuffer = await file.arrayBuffer();
   await prisma.document.create({
     data: {
-      id: fileId,
+      title: file.name,
+      content: Buffer.from(fileBuffer),
       userId: currentUser.id,
-      originalName: file.name,
-      storagePath: `/documents/${fileId}/${file.name}`
+      createdAt: new Date(),
+      filePath: `/documents/${fileId}/${file.name}`,
+      status: 'processing'
     }
   });
 
@@ -33,7 +36,7 @@ export async function processDocument(file: File): Promise<ProcessingResult> {
 
   // Poll for results (implement proper webhook in production)
   return new Promise((resolve) => {
-    bot.on('message', (msg) => {
+    bot.on('message', (msg: any) => {
       if (msg.document?.caption.includes(fileId)) {
         resolve({
           similarityScore: parseFloat(msg.caption?.match(/Score: (\d+\.\d+)%/)?.[1] || '0'),

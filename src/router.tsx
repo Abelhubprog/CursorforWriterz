@@ -115,19 +115,23 @@ const withSuspenseAndError = (Component: React.ComponentType<any>) => {
 
 // Root layout with outlet
 const RootLayoutWithOutlet = () => {
+  const RootLayout = lazy(() => import('./components/layouts/RootLayout'));
+  
   return (
-    <RootLayout>
-      <Outlet />
-    </RootLayout>
+    <Suspense fallback={<div>Loading layout...</div>}>
+      <RootLayout />
+    </Suspense>
   );
 };
 
 // Lazy load pages
 const Homepage = lazy(() => import('./pages/Homepage'));
-const Dashboard = lazy(() => import('./pages/dashboard/Dashboard'));
+const Dashboard = lazy(() => import('./components/Dashboard/Dashboard'));
 const Profile = lazy(() => import('./pages/dashboard/Profile'));
 const Messages = lazy(() => import('./pages/dashboard/Messages'));
 const Orders = lazy(() => import('./pages/dashboard/Orders'));
+const Settings = lazy(() => import('./pages/dashboard/Settings'));
+const DocumentsUpload = lazy(() => import('./pages/dashboard/DocumentsUpload'));
 const AdminRoutes = lazy(() => import('./admin/Routes'));
 const CheckTurnitin = lazy(() => import('./pages/tools/check-turnitin'));
 const LearningHub = lazy(() => import('./pages/LearningHub'));
@@ -162,6 +166,10 @@ export const router = createBrowserRouter([
   {
     path: "/",
     element: <RootLayoutWithOutlet />,
+    future: {
+      v7_startTransition: true,
+      v7_relativeSplatPath: true
+    },
     children: [
       // Public Routes
       { path: "", element: withSuspenseAndError(Homepage)() },
@@ -226,6 +234,8 @@ export const router = createBrowserRouter([
       { path: "profile", element: withSuspenseAndError(Profile)() },
       { path: "orders", element: withSuspenseAndError(Orders)() },
       { path: "messages", element: withSuspenseAndError(Messages)() },
+      { path: "settings", element: withSuspenseAndError(Settings)() },
+      { path: "documents", element: withSuspenseAndError(DocumentsUpload)() },
     ]
   },
 

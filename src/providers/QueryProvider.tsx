@@ -8,7 +8,7 @@ const queryClient = new QueryClient({
     queries: {
       // Production-optimized settings
       staleTime: 60 * 1000, // 1 minute
-      cacheTime: 10 * 60 * 1000, // 10 minutes
+      gcTime: 10 * 60 * 1000, // 10 minutes
       retry: 1, // Only retry once
       retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 10000), // Exponential backoff
       refetchOnWindowFocus: false, // Don't refetch when tab gains focus

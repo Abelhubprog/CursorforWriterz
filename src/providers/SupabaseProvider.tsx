@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 type SupabaseContextType = {
   supabase: SupabaseClient<Database>;
@@ -41,7 +42,7 @@ export const SupabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Set up auth state change listener
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string, session: any) => {
       console.log('Auth state changed:', event, session ? 'Session exists' : 'No session');
     });
 

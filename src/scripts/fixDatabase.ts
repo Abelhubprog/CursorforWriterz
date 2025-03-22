@@ -38,7 +38,7 @@ async function fixDatabase() {
     ];
 
     for (const table of requiredTables) {
-      if (!tables?.find(t => t.table_name === table)) {
+      if (!tables?.find((t: any) => t.table_name === table)) {
         console.log(`Creating table: ${table}`);
         await createTable(table);
       }
@@ -188,7 +188,7 @@ async function fixCategories() {
   const defaultCategories = ['General', 'Academic', 'Business', 'Technical'];
   
   for (const name of defaultCategories) {
-    if (!categories?.find(c => c.name === name)) {
+    if (!categories?.find((c: any) => c.name === name)) {
       await supabase
         .from('categories')
         .insert({

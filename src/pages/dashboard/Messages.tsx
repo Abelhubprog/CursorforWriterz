@@ -34,13 +34,16 @@ import {
   Delete as DeleteIcon,
   Archive as ArchiveIcon,
   MarkEmailRead as MarkEmailReadIcon,
-  EmojiEmotions as EmojiIcon
+  EmojiEmotions as EmojiIcon,
+  Email as EmailIcon,
+  WhatsApp as WhatsAppIcon
 } from '@mui/icons-material';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { format } from 'date-fns';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
 import { useNavigate } from 'react-router-dom';
+import { useUser } from '@clerk/clerk-react';
 
 interface Message {
   id: string;
@@ -136,7 +139,7 @@ const VisuallyHiddenInput = styled('input')({
 });
 
 const Messages: React.FC = () => {
-  const { user } = useAuth();
+  const { isLoaded, isSignedIn, user } = useUser();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -151,6 +154,12 @@ const Messages: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      // Don't redirect, let the component handle the UI for not logged in
+    }
+  }, [isLoaded, isSignedIn, navigate]);
 
   useEffect(() => {
     if (user) {
@@ -181,7 +190,7 @@ const Messages: React.FC = () => {
       let query = supabase
         .from('conversations')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', user?.id)
         .order('last_message_time', { ascending: false });
 
       if (filterStatus) {
@@ -190,7 +199,16 @@ const Messages: React.FC = () => {
 
       const { data, error } = await query;
 
-      if (error) throw error;
+      if (error) {
+        // Handle the specific case when the table doesn't exist
+        if (error.message.includes("relation") && error.message.includes("does not exist")) {
+          console.error('Conversations table does not exist:', error.message);
+          setError('The messaging system is currently being set up. Please check back later.');
+          setConversations([]);
+          return;
+        }
+        throw error;
+      }
 
       setConversations(data || []);
       
@@ -217,7 +235,15 @@ const Messages: React.FC = () => {
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        // Handle the specific case when the table doesn't exist
+        if (error.message.includes("relation") && error.message.includes("does not exist")) {
+          console.error('Messages table does not exist:', error.message);
+          setMessages([]);
+          return;
+        }
+        throw error;
+      }
 
       setMessages(data || []);
     } catch (error: any) {
@@ -233,19 +259,39 @@ const Messages: React.FC = () => {
       if (!user) return;
 
       // Mark all messages as read
-      await supabase
+      const { error: messagesError } = await supabase
         .from('messages')
         .update({ is_read: true })
         .eq('conversation_id', conversationId)
-        .eq('receiver_id', user.id)
+        .eq('receiver_id', user?.id)
         .eq('is_read', false);
 
+      if (messagesError) {
+        // Handle the case when the table doesn't exist
+        if (messagesError.message.includes("relation") && messagesError.message.includes("does not exist")) {
+          console.error('Messages table does not exist:', messagesError.message);
+          return;
+        }
+        console.error('Error marking messages as read:', messagesError.message);
+        return;
+      }
+
       // Update conversation unread count
-      await supabase
+      const { error: conversationError } = await supabase
         .from('conversations')
         .update({ unread_count: 0 })
         .eq('id', conversationId)
-        .eq('user_id', user.id);
+        .eq('user_id', user?.id);
+
+      if (conversationError) {
+        // Handle the case when the table doesn't exist
+        if (conversationError.message.includes("relation") && conversationError.message.includes("does not exist")) {
+          console.error('Conversations table does not exist:', conversationError.message);
+          return;
+        }
+        console.error('Error updating conversation:', conversationError.message);
+        return;
+      }
 
       // Update local state
       setConversations(prevConversations =>
@@ -271,7 +317,7 @@ const Messages: React.FC = () => {
       if (attachments.length > 0) {
         for (const file of attachments) {
           const fileExt = file.name.split('.').pop();
-          const fileName = `${user.id}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+          const fileName = `${user?.id}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
           const filePath = `message-attachments/${fileName}`;
 
           const { error: uploadError } = await supabase.storage
@@ -291,7 +337,7 @@ const Messages: React.FC = () => {
       // Create new message
       const newMessageData = {
         conversation_id: selectedConversation.id,
-        sender_id: user.id,
+        sender_id: user?.id,
         receiver_id: selectedConversation.admin_id,
         content: newMessage,
         is_read: false,
@@ -304,10 +350,18 @@ const Messages: React.FC = () => {
         .insert([newMessageData])
         .select();
 
-      if (messageError) throw messageError;
+      if (messageError) {
+        // Handle the case when the table doesn't exist
+        if (messageError.message.includes("relation") && messageError.message.includes("does not exist")) {
+          console.error('Messages table does not exist:', messageError.message);
+          setError('The messaging system is currently being set up. Please check back later.');
+          return;
+        }
+        throw messageError;
+      }
 
       // Update conversation last message and time
-      await supabase
+      const { error: conversationError } = await supabase
         .from('conversations')
         .update({
           last_message: newMessage,
@@ -316,8 +370,20 @@ const Messages: React.FC = () => {
         })
         .eq('id', selectedConversation.id);
 
+      if (conversationError) {
+        // Handle the case when the table doesn't exist
+        if (conversationError.message.includes("relation") && conversationError.message.includes("does not exist")) {
+          console.error('Conversations table does not exist:', conversationError.message);
+          // Still proceed with updating the local state since we have the message data
+        } else {
+          console.error('Error updating conversation:', conversationError.message);
+        }
+      }
+
       // Update local state
+      if (messageData && messageData.length > 0) {
       setMessages(prevMessages => [...prevMessages, messageData[0]]);
+      }
       setNewMessage('');
       setAttachments([]);
 
@@ -397,20 +463,43 @@ const Messages: React.FC = () => {
            (conversation.order_number && conversation.order_number.toLowerCase().includes(searchTerm.toLowerCase()));
   });
 
+  if (isLoaded && !isSignedIn) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <Helmet>
+          <title>Messages - HandyWriterz</title>
+        </Helmet>
+        <div className="bg-white rounded-lg shadow p-6 mt-8">
+          <div className="flex items-center gap-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+            <div className="text-orange-500">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-medium text-orange-800">Authentication required</h3>
+              <p className="text-orange-700 mt-1">You need to be logged in to view your messages.</p>
+              <div className="mt-3">
+                <button 
+                  onClick={() => navigate('/sign-in')}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-md text-sm hover:bg-orange-700"
+                >
+                  Sign In
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading && conversations.length === 0) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
         <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (!user) {
-    return (
-      <Box p={4}>
-        <Alert severity="warning">
-          You need to be logged in to view your messages.
-        </Alert>
       </Box>
     );
   }
@@ -575,6 +664,7 @@ const Messages: React.FC = () => {
                         : 'No conversations yet'}
                     </Typography>
                     {!searchTerm && !filterStatus && (
+                      <>
                       <Button 
                         variant="contained" 
                         color="primary"
@@ -583,6 +673,29 @@ const Messages: React.FC = () => {
                       >
                         Start a Conversation
                       </Button>
+                        
+                        <Box sx={{ mt: 4, pt: 3, borderTop: 1, borderColor: 'divider' }}>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                            Need to send documents or have urgent matters?
+                          </Typography>
+                          <Button
+                            variant="outlined"
+                            startIcon={<EmailIcon />}
+                            onClick={() => window.open('mailto:admin@handywriterz.com', '_blank')}
+                            sx={{ mr: 2 }}
+                          >
+                            Email Admin
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            color="success"
+                            startIcon={<WhatsAppIcon />}
+                            onClick={() => window.open('https://wa.me/254711264993?text=Hi,%20I%20need%20help%20with%20my%20assignment', '_blank')}
+                          >
+                            WhatsApp Support
+                          </Button>
+                        </Box>
+                      </>
                     )}
                   </Box>
                 )}
@@ -773,6 +886,28 @@ const Messages: React.FC = () => {
                   >
                     Start New Conversation
                   </Button>
+                  
+                  <Box sx={{ mt: 4, pt: 3, borderTop: 1, borderColor: 'divider', width: '100%', textAlign: 'center' }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Need to send documents or have urgent matters?
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      startIcon={<EmailIcon />}
+                      onClick={() => window.open('mailto:admin@handywriterz.com', '_blank')}
+                      sx={{ mr: 2 }}
+                    >
+                      Email Admin
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="success"
+                      startIcon={<WhatsAppIcon />}
+                      onClick={() => window.open('https://wa.me/254711264993?text=Hi,%20I%20need%20help%20with%20my%20assignment', '_blank')}
+                    >
+                      WhatsApp Support
+                  </Button>
+                  </Box>
                 </Box>
               )}
             </Grid>

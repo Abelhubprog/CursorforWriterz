@@ -1,6 +1,22 @@
 import { supabase } from '@/lib/supabaseClient';
 import { useClerk } from '@clerk/clerk-react';
 
+// Add Clerk to the Window interface
+declare global {
+  interface Window {
+    Clerk?: {
+      user?: {
+        id?: string;
+        fullName?: string;
+        imageUrl?: string;
+        primaryEmailAddress?: {
+          emailAddress?: string;
+        };
+      };
+    };
+  }
+}
+
 // Check if a user is an admin
 const checkIfUserIsAdmin = async (userId: string): Promise<boolean> => {
   try {

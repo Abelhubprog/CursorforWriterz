@@ -1,6 +1,7 @@
 import { scheduleJob } from 'node-schedule';
 import { createHash } from 'crypto';
 import * as fs from 'fs';
+import prisma from '../lib/prisma';
 
 // Daily cleanup at 2AM
 scheduleJob('0 2 * * *', async () => {

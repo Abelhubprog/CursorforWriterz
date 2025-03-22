@@ -39,6 +39,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
+import { useUser } from '@clerk/clerk-react';
 
 interface UserProfile {
   id: string;
@@ -95,6 +96,7 @@ const VisuallyHiddenInput = styled('input')({
 
 const Profile: React.FC = () => {
   const { user, session, updatePassword, signInWithMagicLink, logout } = useAuth();
+  const { isLoaded, isSignedIn } = useUser();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -117,12 +119,14 @@ const Profile: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user) {
+    if (isLoaded && !isSignedIn) {
+      // Don't redirect, let the component handle the UI for not logged in
+    } else if (user) {
       fetchProfile();
     } else {
       setLoading(false);
     }
-  }, [user]);
+  }, [isLoaded, isSignedIn, user]);
 
   const fetchProfile = async () => {
     try {
@@ -134,7 +138,7 @@ const Profile: React.FC = () => {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', user.id)
+        .eq('id', user?.id)
         .single();
 
       if (error) throw error;
@@ -167,7 +171,7 @@ const Profile: React.FC = () => {
       let avatarUrl = profile?.avatar_url;
       if (avatarFile) {
         const fileExt = avatarFile.name.split('.').pop();
-        const fileName = `${user.id}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const fileName = `${user?.id}-${Math.random().toString(36).substring(2)}.${fileExt}`;
         const filePath = `avatars/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
@@ -184,7 +188,7 @@ const Profile: React.FC = () => {
       }
 
       const updates = {
-        id: user.id,
+        id: user?.id,
         full_name: fullName,
         bio,
         phone,
@@ -268,7 +272,7 @@ const Profile: React.FC = () => {
 
       if (!user?.email) return;
 
-      const { error } = await signInWithMagicLink(user.email);
+      const { error } = await signInWithMagicLink(user?.email);
 
       if (error) throw error;
 
@@ -294,13 +298,13 @@ const Profile: React.FC = () => {
       const { error: profileError } = await supabase
         .from('profiles')
         .delete()
-        .eq('id', user.id);
+        .eq('id', user?.id);
 
       if (profileError) throw profileError;
 
       // Delete user authentication
       const { error: authError } = await supabase.auth.admin.deleteUser(
-        user.id
+        user?.id
       );
 
       if (authError) throw authError;
@@ -339,20 +343,43 @@ const Profile: React.FC = () => {
     setTabValue(newValue);
   };
 
+  if (isLoaded && !isSignedIn) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <Helmet>
+          <title>Profile - HandyWriterz</title>
+        </Helmet>
+        <div className="bg-white rounded-lg shadow p-6 mt-8">
+          <div className="flex items-center gap-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+            <div className="text-orange-500">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-medium text-orange-800">Authentication required</h3>
+              <p className="text-orange-700 mt-1">You need to be logged in to view this page.</p>
+              <div className="mt-3">
+                <button 
+                  onClick={() => navigate('/sign-in')}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-md text-sm hover:bg-orange-700"
+                >
+                  Sign In
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
         <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (!user) {
-    return (
-      <Box p={4}>
-        <Alert severity="warning">
-          You need to be logged in to view this page.
-        </Alert>
       </Box>
     );
   }
@@ -378,7 +405,7 @@ const Profile: React.FC = () => {
                 <Box position="relative">
                   <Avatar 
                     src={avatarPreview || profile?.avatar_url} 
-                    alt={fullName || user.email || 'User'} 
+                    alt={fullName || (user?.email || 'User')} 
                     sx={{ width: 120, height: 120, mb: 2 }}
                   />
                   <IconButton 
@@ -402,7 +429,7 @@ const Profile: React.FC = () => {
                 </Typography>
                 
                 <Typography variant="body2" color="text.secondary" gutterBottom>
-                  {user.email}
+                  {user?.email || 'No email available'}
                 </Typography>
                 
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1, textAlign: 'center' }}>
@@ -441,7 +468,7 @@ const Profile: React.FC = () => {
                       <TextField
                         fullWidth
                         label="Email"
-                        value={user.email}
+                        value={user?.email || 'No email available'}
                         disabled
                         variant="outlined"
                         helperText="Email cannot be changed"

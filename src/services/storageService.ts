@@ -93,6 +93,31 @@ export const storageService = {
   },
 
   /**
+   * Get file details and download URL
+   */
+  async getFile(
+    path: string, 
+    bucket: string = 'media'
+  ): Promise<{ path: string; url: string; size?: number } | null> {
+    try {
+      // Get the download URL
+      const { data: urlData, error: urlError } = await supabase.storage
+        .from(bucket)
+        .createSignedUrl(path, 3600);
+      
+      if (urlError) throw urlError;
+      
+      return {
+        path,
+        url: urlData.signedUrl,
+      };
+    } catch (error) {
+      console.error('Get file error:', error);
+      return null;
+    }
+  },
+
+  /**
    * List files in a bucket/folder
    */
   async listFiles(

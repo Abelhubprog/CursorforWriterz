@@ -44,7 +44,7 @@ export const interactionsService = {
           table: 'comments',
           filter: `service_id=eq.${serviceId}`
         },
-        (payload) => {
+        (payload: any) => {
           const record = payload.new as CommentRecord;
           onComment(this.transformCommentRecord(record));
         }
@@ -72,7 +72,7 @@ export const interactionsService = {
           table: 'content_likes',
           filter: `service_id=eq.${serviceId}`
         },
-        (payload) => {
+        (payload: any) => {
           const record = payload.new as LikeRecord;
           onLike(this.transformLikeRecord(record));
         }
@@ -236,7 +236,7 @@ export const interactionsService = {
       serviceId: record.service_id,
       userId: record.user_id,
       userDisplayName: record.user_display_name || 'Anonymous',
-      userAvatarUrl: record.user_avatar_url,
+      userAvatarUrl: record.user_avatar_url || undefined,
       isApproved: record.is_approved,
       createdAt: record.created_at,
       updatedAt: record.updated_at

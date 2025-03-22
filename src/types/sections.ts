@@ -1,5 +1,17 @@
 import { LucideIcon } from 'lucide-react';
-import { ContactInfo, FooterLinks } from '@/components/sections/Footer';
+// Define types that were previously imported from Footer
+export interface FooterLinks {
+  quickLinks: { label: string; path: string }[];
+  supportLinks: { label: string; path: string }[];
+  companyLinks: { label: string; path: string }[];
+  serviceLinks: { label: string; path: string }[];
+}
+
+export interface ContactInfo {
+  email: string;
+  phone: string;
+  address: string;
+}
 
 export interface Feature {
   icon: React.ReactNode;

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useCallback } from 'react';
 import { useQuery, useMutation, type UseQueryOptions } from '@tanstack/react-query';
 import { supabase, safeQuery } from '@/lib/supabaseClient';
 import { toast } from 'react-hot-toast';
-import DatabaseService from '@/services/databaseService';
+import DatabaseService from '../services/databaseService';
 
 interface Service {
   id: string;

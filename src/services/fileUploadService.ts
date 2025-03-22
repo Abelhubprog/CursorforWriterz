@@ -126,7 +126,7 @@ export const uploadFile = async (
       .upload(filePath, file, {
         cacheControl: '3600',
         upsert: false,
-        onUploadProgress: (progress) => {
+        onUploadProgress: (progress: any) => {
           if (onProgress) {
             const percent = (progress.loaded / progress.total) * 100;
             onProgress(Math.round(percent));

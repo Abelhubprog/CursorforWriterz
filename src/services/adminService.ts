@@ -1,5 +1,14 @@
 import { supabase } from '@/lib/supabaseClient';
-import type { Post, ServiceCategory, Tag, Media, User, Analytics, GeneralSettings, SeoSettings, ApiSettings, ContentBlock } from '@/types/admin';
+import type { Post, ServiceCategory, Tag, Media, User, Analytics, GeneralSettings, SeoSettings, ApiSettings } from '@/types/admin';
+
+interface ContentBlock {
+  id?: string;
+  type: string;
+  content: string;
+  metadata?: any;
+  order?: number;
+  post_id?: string;
+}
 
 /**
  * Admin Service
@@ -22,7 +31,7 @@ export const adminService = {
     if (error) throw error;
     
     // Transform data to match our types
-    return data.map(post => ({
+    return data.map((post: any) => ({
       id: post.id.toString(),
       title: post.title,
       slug: post.slug,
@@ -260,7 +269,7 @@ export const adminService = {
       
     if (error) throw error;
     
-    return data.map(category => ({
+    return data.map((category: any) => ({
       id: category.id.toString(),
       name: category.name,
       slug: category.slug,
@@ -319,7 +328,7 @@ export const adminService = {
       
     if (error) throw error;
     
-    return data.map(tag => ({
+    return data.map((tag: any) => ({
       id: tag.id.toString(),
       name: tag.name,
       slug: tag.slug,
@@ -379,7 +388,7 @@ export const adminService = {
       
     if (error) throw error;
     
-    return data.map(media => ({
+    return data.map((media: any) => ({
       id: media.id.toString(),
       title: media.title,
       type: media.type,
@@ -516,7 +525,7 @@ export const adminService = {
       
     if (error) throw error;
     
-    return data.map(user => ({
+    return data.map((user: any) => ({
       id: user.id,
       name: user.full_name,
       email: user.email,

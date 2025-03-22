@@ -190,10 +190,10 @@ export const getBlogPostBySlug = async (slug: string, forceFresh: boolean = fals
       await supabase
         .from('blog_posts')
         .update({ 
-          views: (result.data.views || 0) + 1,
+          views: (result.data?.views || 0) + 1,
           updated_at: new Date().toISOString()
         })
-        .eq('id', result.data.id);
+        .eq('id', result.data?.id);
     } catch (err) {
       console.error('Error incrementing view count:', err);
       // Don't fail the whole operation if view count update fails

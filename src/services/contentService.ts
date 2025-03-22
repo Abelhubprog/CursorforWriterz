@@ -128,7 +128,7 @@ export const contentService = {
     }
 
     // Transform data to match our Post interface
-    const posts = (data || []).map(item => {
+    const posts = (data || []).map((item: any) => {
       // Get the first author from authors array if it exists
       const author = item.authors && item.authors[0] 
         ? {
@@ -599,8 +599,8 @@ export const contentService = {
     }
     
     const totalPosts = postsData?.length || 0;
-    const publishedPosts = postsData?.filter(post => post.status === 'published').length || 0;
-    const draftPosts = postsData?.filter(post => post.status === 'draft').length || 0;
+    const publishedPosts = postsData?.filter((post: any) => post.status === 'published').length || 0;
+    const draftPosts = postsData?.filter((post: any) => post.status === 'draft').length || 0;
     
     // Get views data from analytics if available
     // This is placeholder code - you'll need to implement the actual analytics

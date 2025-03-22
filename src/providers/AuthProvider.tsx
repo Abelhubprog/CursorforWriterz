@@ -203,9 +203,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const updatePassword = async (password: string) => {
     try {
-      if (!user) throw new Error("No user found");
+      if (!user || !clerk?.user) throw new Error("No user found");
       
-      await clerk.user.updatePassword({ newPassword: password });
+      await clerk?.user?.updatePassword({ newPassword: password });
       toast.success("Password Updated: Your password has been successfully changed");
       return { success: true };
     } catch (error: any) {
@@ -217,6 +217,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const sendPasswordResetEmail = async (email: string) => {
     try {
+      if (!clerk?.signIn) throw new Error("Authentication system not available");
+      
       await clerk.signIn.create({
         strategy: "reset_password_email_code",
         identifier: email,
@@ -232,6 +234,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signInWithMagicLink = async (email: string) => {
     try {
+      if (!clerk?.signIn) throw new Error("Authentication system not available");
+      
       await clerk.signIn.create({
         strategy: "email_link",
         identifier: email,

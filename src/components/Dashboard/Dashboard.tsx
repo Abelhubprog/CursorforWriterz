@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser, useAuth } from '@clerk/clerk-react';
 import { supabase } from '@/lib/supabaseClient';
@@ -29,6 +29,22 @@ import {
   Upload,
   X
 } from 'lucide-react';
+import fileUploadService from '@/services/fileUploadService';
+import { toast } from 'react-hot-toast';
+import { documentSubmissionService } from '@/services/documentSubmissionService';
+
+// Simple AdminDocuments component
+const AdminDocuments = () => {
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-sm">
+      <h2 className="text-xl font-bold mb-6">User Documents</h2>
+      <p className="text-gray-600">This section displays documents submitted by users.</p>
+      <div className="mt-4 p-4 bg-gray-100 rounded-lg text-center">
+        <p>No documents to display</p>
+      </div>
+    </div>
+  );
+};
 
 const Dashboard = () => {
   const { user } = useUser();
@@ -50,15 +66,20 @@ const Dashboard = () => {
   const [paymentStatus, setPaymentStatus] = useState<string>('');
   const [module, setModule] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<Array<{ name: string; url: string; path: string }>>([]);
   const [uploading, setUploading] = useState(false);
-  const fileInputRef = React.createRef<HTMLInputElement>();
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [showEmailOption, setShowEmailOption] = useState(false);
+  const [emailAddress, setEmailAddress] = useState('');
+  const [emailMessage, setEmailMessage] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [showTurnitinModal, setShowTurnitinModal] = useState(false);
   const [turnitinFile, setTurnitinFile] = useState<File | null>(null);
   const [turnitinResult, setTurnitinResult] = useState<any>(null);
   const [isCheckingTurnitin, setIsCheckingTurnitin] = useState(false);
   const [processingMessage, setProcessingMessage] = useState('');
-  const turnitinFileInputRef = React.createRef<HTMLInputElement>(null);
+  const turnitinFileInputRef = useRef<HTMLInputElement>(null);
 
   const supportAreas = [
     { id: 'adult', title: 'Adult Health Nursing', icon: '👨‍⚕️' },
@@ -163,7 +184,471 @@ const Dashboard = () => {
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setShowPaymentOptions(true);
+    
+    if (files.length === 0) {
+      toast.error('Please upload at least one file before proceeding to payment');
+      return;
+    }
+    
+    // If files are already uploaded, proceed to payment
+    if (uploadedFiles.length > 0) {
+      setShowPaymentOptions(true);
+      return;
+    }
+    
+    // Otherwise, upload files first
+    handleUploadSubmit();
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = event.target.files;
+    if (!selectedFiles || selectedFiles.length === 0) return;
+    
+    const fileList = Array.from(selectedFiles);
+    
+    // Simple file validation
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    const validFiles: File[] = [];
+    const invalidFiles: string[] = [];
+    
+    fileList.forEach(file => {
+      if (file.size > maxSize) {
+        invalidFiles.push(`${file.name} (exceeds 50MB size limit)`);
+      } else {
+        validFiles.push(file);
+      }
+    });
+    
+    if (invalidFiles.length > 0) {
+      toast.error(`Some files were rejected due to size limits: ${invalidFiles.join(', ')}`);
+    }
+    
+    if (validFiles.length > 0) {
+      setFiles(validFiles);
+      toast.success(`${validFiles.length} file(s) selected successfully`);
+    }
+  };
+
+  const handleUploadSubmit = async () => {
+    if (files.length === 0) {
+      toast.error('Please select files to upload');
+      return;
+    }
+    
+    setUploading(true);
+    setUploadProgress(0);
+    
+    try {
+      // Generate a simpler folder path based on timestamp to avoid permission issues
+      const timestamp = new Date().getTime();
+      const folderPath = `uploads/${timestamp}`;
+      
+      // Check if the 'assignments' bucket exists, if not we'll use the 'default' bucket or fallback to local storage
+      let bucket = 'assignments';
+      
+      try {
+        // Attempt to get bucket details to check if it exists
+        const { error: bucketError } = await supabase.storage.getBucket(bucket);
+        
+        if (bucketError) {
+          // If bucket doesn't exist, try the default bucket
+          bucket = 'default';
+          const { error: defaultBucketError } = await supabase.storage.getBucket(bucket);
+          
+          if (defaultBucketError) {
+            // No valid bucket found, we'll just store file references locally
+            console.warn('No valid storage bucket found, using local file references only');
+            
+            // Create local file references
+            const localUploads = files.map(file => ({
+              name: file.name,
+              url: URL.createObjectURL(file), // Create temporary URL
+              path: `local/${file.name}`,
+              size: file.size
+            }));
+            
+            setUploadedFiles(localUploads);
+            toast.success('Files processed locally (storage unavailable)');
+            
+            // Still create a record without actual file uploads
+            const orderData = {
+              user_id: user?.id || 'anonymous',
+              service_type: selectedService?.id,
+              subject_area: selectedArea,
+              word_count: wordCount,
+              study_level: studyLevel,
+              due_date: dueDate,
+              module: module,
+              instructions: instructions,
+              price: calculatedPrice,
+              status: 'draft',
+              files: localUploads.map(file => ({
+                name: file.name,
+                size: formatBytes(file.size)
+              })),
+              created_at: new Date().toISOString()
+            };
+            
+            try {
+              const { error: orderError } = await supabase
+                .from('orders')
+                .insert(orderData);
+              
+              if (orderError) {
+                console.warn('Could not save order to database:', orderError);
+              }
+            } catch (err) {
+              console.warn('Error saving order:', err);
+            }
+            
+            setShowPaymentOptions(true);
+            return;
+          }
+        }
+      } catch (bucketCheckError) {
+        console.warn('Error checking bucket:', bucketCheckError);
+        // Continue with attempt to upload, it might still work
+      }
+      
+      // Upload the files one by one
+      const uploadedFiles = [];
+      let totalProgress = 0;
+      
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileExt = file.name.split('.').pop();
+        const fileName = `file_${timestamp}_${i}.${fileExt}`;
+        const filePath = `${folderPath}/${fileName}`;
+        
+        try {
+          // Update progress for this file
+          setUploadProgress(Math.round((i / files.length) * 50)); // First 50% for starting uploads
+          
+          const { data, error } = await supabase.storage
+            .from(bucket)
+            .upload(filePath, file, {
+              cacheControl: '3600',
+              upsert: false
+            });
+          
+          if (error) throw error;
+          
+          // Get the public URL
+          const { data: urlData } = supabase.storage
+            .from(bucket)
+            .getPublicUrl(filePath);
+          
+          uploadedFiles.push({
+            name: file.name,
+            url: urlData.publicUrl,
+            path: filePath,
+            size: file.size
+          });
+          
+          // Update progress
+          totalProgress = Math.round(((i + 1) / files.length) * 100);
+          setUploadProgress(totalProgress);
+        } catch (fileError) {
+          console.error(`Error uploading file ${file.name}:`, fileError);
+          toast.error(`Failed to upload ${file.name}`);
+          
+          // Continue with other files
+          continue;
+        }
+      }
+      
+      setUploadedFiles(uploadedFiles);
+      
+      if (uploadedFiles.length === 0) {
+        throw new Error('No files were uploaded successfully');
+      }
+      
+      // Save the order metadata to the database
+      const orderData = {
+        user_id: user?.id || 'anonymous',
+        service_type: selectedService?.id,
+        subject_area: selectedArea,
+        word_count: wordCount,
+        study_level: studyLevel,
+        due_date: dueDate,
+        module: module,
+        instructions: instructions,
+        price: calculatedPrice,
+        status: 'draft',
+        files: uploadedFiles,
+        created_at: new Date().toISOString()
+      };
+      
+      try {
+        const { error: orderError } = await supabase
+        .from('orders')
+          .insert(orderData);
+        
+        if (orderError) {
+          console.warn('Could not save order to database:', orderError);
+          // Continue anyway as we have the files
+        }
+      } catch (dbError) {
+        console.warn('Error saving to database:', dbError);
+        // Continue anyway as we have the files
+      }
+      
+      const successMsg = uploadedFiles.length === files.length
+        ? 'All files uploaded successfully!'
+        : `${uploadedFiles.length} of ${files.length} files uploaded.`;
+      
+      toast.success(`${successMsg} Proceed to payment.`);
+      
+      // Now we can show payment options
+      setShowPaymentOptions(true);
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to upload files. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Helper function to format bytes
+  const formatBytes = (bytes: number, decimals = 2): string => {
+    if (bytes === 0) return '0 Bytes';
+    
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+    
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  };
+
+  const handleRemoveFile = (index: number) => {
+    const newFiles = [...files];
+    newFiles.splice(index, 1);
+    setFiles(newFiles);
+  };
+
+  const handleEmailDocuments = async () => {
+    // Email validation regex
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailAddress)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+    
+    try {
+      // Check if files are available either from uploaded files or newly selected files
+      if (uploadedFiles.length === 0 && files.length === 0) {
+        toast.error('No files available to send');
+        return;
+      }
+      
+      setUploading(true);
+      
+      // Get the subject from the form
+      const subjectField = document.getElementById('emailSubject') as HTMLInputElement;
+      const subject = subjectField ? subjectField.value : 'Document Submission';
+      
+      // First handle any new files that need to be uploaded
+      let allFiles = [...uploadedFiles];
+      
+      if (files.length > 0) {
+        toast.loading('Uploading new files...');
+        // Upload new files first
+        const newUploadedFiles = await Promise.all(
+          files.map(async (file) => {
+            try {
+              const result = await fileUploadService.uploadFile(file);
+              if (result) {
+                return { 
+                  name: file.name, 
+                  url: result.url, 
+                  path: result.path,
+                  size: file.size,
+                  type: file.type
+                };
+              }
+              throw new Error(`Failed to upload ${file.name}`);
+            } catch (err) {
+              console.error(`Upload error for ${file.name}:`, err);
+              return null;
+            }
+          })
+        );
+        
+        // Filter out failed uploads
+        const successfulUploads = newUploadedFiles.filter(f => f !== null) as typeof uploadedFiles;
+        allFiles = [...allFiles, ...successfulUploads];
+        
+        if (successfulUploads.length > 0) {
+          setUploadedFiles(prev => [...prev, ...successfulUploads]);
+        }
+        
+        toast.dismiss();
+      }
+      
+      if (allFiles.length === 0) {
+        throw new Error('No files available after upload attempts');
+      }
+      
+      // Convert all files to File objects for submission
+      const filesToSubmit = await Promise.all(allFiles.map(async (file) => {
+        if (file instanceof File) return file;
+        
+        try {
+          // Fetch file from URL and convert to File object
+          const response = await fetch(file.url);
+          const blob = await response.blob();
+          return new File([blob], file.name, { type: blob.type || 'application/octet-stream' });
+        } catch (error) {
+          console.error(`Error fetching file ${file.name}:`, error);
+          return null;
+        }
+      }));
+      
+      // Filter out any null values from failed fetches
+      const validFiles = filesToSubmit.filter(file => file !== null) as File[];
+      
+      if (validFiles.length === 0) {
+        throw new Error('Failed to prepare files for submission');
+      }
+      
+      // Create comprehensive metadata for the document submission
+      const metadata = {
+        orderId: `email-${Date.now()}`,
+        serviceType: selectedService?.id || 'email-submission',
+        subjectArea: selectedArea || 'general',
+        wordCount: wordCount || 0,
+        studyLevel: studyLevel || 'not-specified',
+        dueDate: dueDate || new Date().toISOString().split('T')[0],
+        module: module || 'general',
+        instructions: emailMessage || 'Email submission',
+        emailSubject: subject,
+        submissionType: 'email',
+        clientEmail: userEmail || '',
+        clientName: userName || ''
+      };
+      
+      // Use documentSubmissionService directly
+      const result = await documentSubmissionService.submitDocumentsToAdmin(
+        user?.id || 'anonymous',
+        validFiles,
+        metadata,
+        {
+          notifyAdminEmail: true,
+          adminEmail: emailAddress, // Send to the specified email
+          notifyTelegram: true,
+          notifyInApp: true
+        }
+      );
+      
+      if (result.success) {
+        toast.success('Documents sent successfully!');
+        setShowEmailOption(false);
+        setFiles([]);
+        setEmailMessage('');
+      } else {
+        throw new Error(result.message || 'Failed to send documents');
+      }
+    } catch (error: any) {
+      console.error('Email error:', error);
+      toast.error(error.message || 'Failed to send documents. Please try again.');
+      
+      // Create a record of the failed attempt for admin follow-up
+      if (user) {
+        try {
+          await supabase.from('messages').insert({
+            user_id: user.id,
+            content: `Failed attempt to send documents to ${emailAddress}. Error: ${error.message || 'Unknown error'}`,
+            sender_type: 'system',
+            is_read: false
+          });
+          toast.info('Our team has been notified and will assist you.');
+        } catch (err) {
+          console.error('Failed to create message record:', err);
+        }
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Function to send documents to admin
+  const handleSendToAdmin = async () => {
+    if (!user) {
+      toast.error('You must be signed in to send documents to admin');
+      return;
+    }
+
+    if (uploadedFiles.length === 0) {
+      toast.error('Please upload files before sending to admin');
+      return;
+    }
+
+    try {
+      setUploading(true);
+      
+      // Convert uploadedFiles to File objects if they're not already
+      const filesToSend = await Promise.all(uploadedFiles.map(async (file) => {
+        if (file instanceof File) return file;
+        
+        try {
+          // Fetch file from URL and convert to File object
+          const response = await fetch(file.url);
+          const blob = await response.blob();
+          return new File([blob], file.name, { type: blob.type });
+        } catch (error) {
+          console.error(`Error fetching file ${file.name}:`, error);
+          // Return null for failed files
+          return null;
+        }
+      }));
+      
+      // Filter out any null values from failed fetches
+      const validFiles = filesToSend.filter(file => file !== null) as File[];
+      
+      if (validFiles.length === 0) {
+        throw new Error('Failed to prepare files for submission');
+      }
+      
+      // Prepare metadata for the document submission service
+      const metadata = {
+        orderId: 'manual-submission',
+        serviceType: selectedService?.id,
+        subjectArea: selectedArea || '',  // Fix: Provide empty string instead of null
+        wordCount: wordCount,
+        studyLevel: studyLevel,
+        dueDate: dueDate,
+        module: module,
+        instructions: instructions,
+        price: calculatedPrice
+      };
+      
+      // Use the document submission service directly
+      const result = await documentSubmissionService.submitDocumentsToAdmin(
+        user.id,
+        validFiles,
+        metadata,
+        {
+          notifyAdminEmail: true, 
+          notifyTelegram: true,
+          notifyInApp: true
+        }
+      );
+      
+      if (result.success) {
+        toast.success('Documents sent to admin successfully!');
+        // Hide email option after successful submission
+        setShowEmailOption(false);
+      } else {
+        throw new Error(result.message || 'Failed to send documents');
+      }
+    } catch (error: any) {
+      console.error('Error sending to admin:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to send documents to admin. Please try again.');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleCryptoPayment = async () => {
@@ -246,41 +731,64 @@ const Dashboard = () => {
   };
 
   const handlePayLater = () => {
-    alert('Your order has been saved. You can pay later from your dashboard.');
+    // Update order status to 'pending_payment'
+    if (user) {
+      // First notify the admin about the new order
+      notifyAdminOfOrder();
+    }
     setShowPaymentOptions(false);
-    setActiveTab('orders');
-    setSelectedService(null);
-    setSelectedArea(null);
+    toast.success('Order saved. You can pay later through your dashboard.');
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files) return;
-
-    setUploading(true);
+  // Function to notify admin when an order is placed
+  const notifyAdminOfOrder = async () => {
+    if (!user) return;
+    
     try {
-      const formData = new FormData();
-      Array.from(files).forEach((file) => {
-        formData.append('files', file);
-      });
+      // Get order details for the notification
+      const orderDetails = `
+Service: ${selectedService?.title || 'Not specified'}
+Subject: ${selectedArea || 'Not specified'}
+Words: ${wordCount || 'Not specified'}
+Level: ${studyLevel || 'Not specified'}
+Module: ${module || 'Not specified'}
+Due Date: ${dueDate || 'Not specified'}
+Price: £${calculatedPrice?.toFixed(2) || 'Not calculated'}
+Files: ${uploadedFiles.length} uploaded
+`;
 
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('File upload failed');
+      const messageContent = `New order placed by user ${user.fullName || user.username || user.id}:\n\n${orderDetails}\n\nPayment status: Pending`;
+      
+      // Create message in messages table
+      const { error: messageError } = await supabase
+        .from('messages')
+        .insert({
+          user_id: user.id,
+          content: messageContent,
+          sender_type: 'user',
+          is_read: false
+        });
+      
+      if (messageError) {
+        console.warn('Could not send order notification to admin:', messageError);
+        
+        // Attempt to send via email instead
+        try {
+          const adminEmail = 'admin@handywriterz.com';
+          
+          await supabase.functions.invoke('send-email', {
+            body: {
+              to: adminEmail,
+              subject: `New order from ${user.fullName || user.username || user.id}`,
+              message: messageContent
+            }
+          });
+        } catch (emailError) {
+          console.warn('Could not send order notification email:', emailError);
+        }
       }
-
-      const data = await response.json();
-      setFiles(Array.from(files));
-      alert('Files uploaded successfully');
     } catch (error) {
-      console.error('Upload error:', error);
-      alert('Failed to upload files. Please try again.');
-    } finally {
-      setUploading(false);
+      console.error('Error notifying admin of order:', error);
     }
   };
 
@@ -447,6 +955,141 @@ const Dashboard = () => {
   const userEmail = user?.primaryEmailAddress?.emailAddress || 'No email available';
   const userName = user?.fullName || user?.username || 'User';
 
+  // Add these new state variables for real data
+  const [activeOrders, setActiveOrders] = useState<any[]>([]);
+  const [completedOrders, setCompletedOrders] = useState<any[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [newMessage, setNewMessage] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [countryCode, setCountryCode] = useState('+44');
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // Add useEffect to fetch orders from Supabase
+  useEffect(() => {
+    const fetchOrders = async () => {
+      if (!user) return;
+      
+      setLoadingOrders(true);
+      try {
+        const { data: orderData, error } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (orderData) {
+          const active = orderData.filter((order: any) => order.status !== 'completed');
+          const completed = orderData.filter((order: any) => order.status === 'completed');
+          
+          setActiveOrders(active);
+          setCompletedOrders(completed);
+        }
+      } catch (error) {
+        console.error('Error fetching orders:', error);
+        toast.error('Failed to load your orders');
+      } finally {
+        setLoadingOrders(false);
+      }
+    };
+    
+    if (activeTab === 'orders' || activeTab === 'completed') {
+      fetchOrders();
+    }
+  }, [user, activeTab]);
+
+  // Add useEffect to fetch messages from Supabase
+  useEffect(() => {
+    const fetchMessages = async () => {
+      if (!user || activeTab !== 'messages') return;
+      
+      setLoadingMessages(true);
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        setMessages(data || []);
+      } catch (error) {
+        console.error('Error fetching messages:', error);
+        toast.error('Failed to load your messages');
+      } finally {
+        setLoadingMessages(false);
+      }
+    };
+    
+    if (activeTab === 'messages') {
+      fetchMessages();
+      
+      // Subscribe to real-time message updates
+      const subscription = supabase
+        .channel('messages-channel')
+        .on('postgres_changes', { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'messages',
+          filter: `user_id=eq.${user?.id}` 
+        }, (payload: any) => {
+          // Add new message to state
+          setMessages(prev => [payload.new, ...prev]);
+        })
+        .subscribe();
+      
+      return () => {
+        supabase.removeChannel(subscription);
+      };
+    }
+  }, [user, activeTab]);
+
+  // Add function to send messages
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newMessage.trim() || !user) return;
+    
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .insert({
+          user_id: user.id,
+          content: newMessage.trim(),
+          sender_type: 'user'
+        });
+      
+      if (error) throw error;
+      
+      setNewMessage('');
+      toast.success('Message sent successfully');
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast.error('Failed to send message');
+    }
+  };
+
+  // Add function to save profile information
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    
+    setSavingProfile(true);
+    try {
+      // Here we would typically update the user's profile in Clerk
+      // For demo purposes, we'll just show a success message
+      toast.success('Profile updated successfully');
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      toast.error('Failed to update profile');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -599,32 +1242,60 @@ const Dashboard = () => {
                   New Order
                 </button>
               </div>
-              {mockOrders
-                .filter(order => order.status === 'in-progress')
-                .map(order => (
+              
+              {loadingOrders ? (
+                <div className="bg-white rounded-xl p-6 shadow-sm text-center">
+                  <div className="animate-spin h-8 w-8 border-t-2 border-b-2 border-blue-500 rounded-full mx-auto"></div>
+                  <p className="mt-2 text-gray-500">Loading orders...</p>
+                </div>
+              ) : activeOrders.length > 0 ? (
+                activeOrders.map(order => (
                   <div key={order.id} className="bg-white rounded-xl p-6 shadow-sm">
                     <div className="flex justify-between items-start mb-4">
                       <div>
-                        <h3 className="font-semibold text-lg">{order.title}</h3>
+                        <h3 className="font-semibold text-lg">{`${order.service_type || 'Assignment'} - ${order.subject_area || 'General'}`}</h3>
                         <p className="text-gray-600">
-                          {order.wordCount.toLocaleString()} words • Due {new Date(order.dueDate).toLocaleDateString()}
+                          {order.word_count?.toLocaleString()} words • Due {new Date(order.due_date).toLocaleDateString()}
                         </p>
                       </div>
-                      <span className="px-3 py-1 bg-blue-100 text-blue-600 rounded-full text-sm">
-                        In Progress
+                      <span className={`px-3 py-1 rounded-full text-sm ${
+                        order.status === 'completed' ? 'bg-green-100 text-green-600' : 
+                        order.status === 'in-progress' ? 'bg-blue-100 text-blue-600' :
+                        'bg-yellow-100 text-yellow-600'
+                      }`}>
+                        {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">
-                        £{order.price.toFixed(2)}
+                        £{typeof order.price === 'number' ? order.price.toFixed(2) : '0.00'}
                       </span>
-                      <button className="text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                      <button 
+                        className="text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                        onClick={() => {
+                          // In a real app, this would navigate to order details
+                          toast.success(`Viewing details for order ${order.id}`);
+                        }}
+                      >
                         View Details
                         <ExternalLink className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
-                ))}
+                ))
+              ) : (
+                <div className="bg-white rounded-xl p-6 shadow-sm text-center">
+                  <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium mb-1">No active orders</h3>
+                  <p className="text-gray-500 mb-4">You don't have any active orders yet.</p>
+                  <button 
+                    onClick={() => setSelectedArea('adult')}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Create Your First Order
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -737,6 +1408,7 @@ const Dashboard = () => {
                     onChange={(e) => setStudyLevel(e.target.value)}
                     required
                     className="w-full p-3 border rounded-lg"
+                    title="Choose your study level"
                   >
                     <option value="">Select level</option>
                     <option value="Level 4">Level 4 (Year 1)</option>
@@ -754,6 +1426,7 @@ const Dashboard = () => {
                     min={new Date().toISOString().split('T')[0]}
                     required
                     className="w-full p-3 border rounded-lg"
+                    title="Select your assignment due date"
                   />
                 </div>
                 <div>
@@ -772,25 +1445,138 @@ const Dashboard = () => {
                     <input
                       type="file"
                       ref={fileInputRef}
-                      onChange={handleFileUpload}
+                      onChange={handleFileSelect}
                       className="hidden"
                       multiple
+                      title="Upload assignment files"
                     />
                     <button
+                      type="button"
                       onClick={() => fileInputRef.current?.click()}
                       className="flex items-center gap-2 rounded-md border border-gray-300 px-4 py-2 hover:bg-gray-50"
                       disabled={uploading}
+                      title="Click to select files"
                     >
                       <Upload className="h-5 w-5" />
-                      {uploading ? 'Uploading...' : 'Upload Files'}
+                      {uploading ? 'Uploading...' : 'Select Files'}
                     </button>
-                    {files.length > 0 && (
-                      <span className="text-sm text-gray-600">
-                        {files.length} file(s) uploaded
-                      </span>
+                    
+                    {files.length > 0 && !uploading && uploadedFiles.length === 0 && (
+                      <button
+                        type="button"
+                        onClick={handleUploadSubmit}
+                        className="flex items-center gap-2 rounded-md bg-green-50 text-green-600 border border-green-200 px-4 py-2 hover:bg-green-100"
+                      >
+                        <Upload className="h-5 w-5" />
+                        Upload {files.length} file(s)
+                      </button>
                     )}
                   </div>
+                  
+                  {uploading && (
+                    <div className="mt-2">
+                      <div className="w-full bg-gray-200 rounded-full h-2.5">
+                        <div 
+                          className="bg-blue-600 h-2.5 rounded-full" 
+                          style={{ width: `${uploadProgress}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1">Uploading: {uploadProgress}%</p>
+                    </div>
+                  )}
+                  
+                  {files.length > 0 && !uploading && (
+                    <div className="mt-4 space-y-2">
+                      <p className="text-sm font-medium">Selected Files:</p>
+                      {files.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded">
+                          <span className="text-sm truncate">{file.name} ({formatBytes(file.size)})</span>
+                          {uploadedFiles.length === 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveFile(index)}
+                              className="text-red-500 hover:text-red-600"
+                              title="Remove file"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {uploadedFiles.length > 0 && (
+                    <div className="mt-4 p-3 bg-green-50 rounded-lg">
+                      <p className="text-green-600 flex items-center gap-2">
+                        <FileCheck className="h-5 w-5" />
+                        <span>Files uploaded successfully! You can now proceed to payment.</span>
+                      </p>
+                    </div>
+                  )}
+                  
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowEmailOption(!showEmailOption)}
+                      className="text-blue-600 hover:text-blue-700 text-sm flex items-center"
+                    >
+                      <MessageSquare className="h-4 w-4 mr-1" />
+                      {showEmailOption ? 'Hide email option' : 'Send files via email'}
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={handleSendToAdmin}
+                      className="text-green-600 hover:text-green-700 text-sm flex items-center mt-2"
+                      disabled={!uploadedFiles.length}
+                    >
+                      <User className="h-4 w-4 mr-1" />
+                      Send to admin
+                    </button>
+                  </div>
+                  
+                  {showEmailOption && (
+                    <div className="mt-4 p-4 border rounded-lg">
+                      <h4 className="font-medium mb-2">Send Files via Email</h4>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Email Address</label>
+                          <input
+                            type="email"
+                            value={emailAddress}
+                            onChange={(e) => setEmailAddress(e.target.value)}
+                            className="w-full p-2 border rounded-md"
+                            placeholder="recipient@example.com"
+                            title="Recipient email address"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Message (Optional)</label>
+                          <textarea
+                            value={emailMessage}
+                            onChange={(e) => setEmailMessage(e.target.value)}
+                            className="w-full p-2 border rounded-md resize-none"
+                            rows={3}
+                            placeholder="Add a message to include with the files"
+                            title="Optional message"
+                          ></textarea>
+                        </div>
+                        <div>
+                          <button
+                            type="button"
+                            onClick={handleEmailDocuments}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                            disabled={!uploadedFiles.length || !emailAddress}
+                          >
+                            Send Files
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
+                
                 <div className="flex justify-end gap-3">
                   <button
                     type="button"
@@ -801,10 +1587,26 @@ const Dashboard = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                    className={`px-6 py-2 rounded-lg flex items-center gap-2 ${
+                      uploadedFiles.length > 0 
+                      ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                      : files.length > 0 
+                        ? 'bg-green-600 text-white hover:bg-green-700'
+                        : 'bg-gray-400 text-white cursor-not-allowed'
+                    }`}
+                    disabled={files.length === 0}
                   >
-                    <PoundSterling className="h-4 w-4" />
-                    Continue to Payment
+                    {uploadedFiles.length > 0 ? (
+                      <>
+                        <PoundSterling className="h-4 w-4" />
+                        Proceed to Payment
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4" />
+                        {files.length > 0 ? 'Upload Files & Continue' : 'Please Select Files'}
+                      </>
+                    )}
                   </button>
                 </div>
               </form>
@@ -877,15 +1679,20 @@ const Dashboard = () => {
           {activeTab === 'completed' && (
             <div className="space-y-4">
               <h2 className="text-xl font-bold mb-6">Completed Orders</h2>
-              {mockOrders
-                .filter(order => order.status === 'completed')
-                .map(order => (
+              
+              {loadingOrders ? (
+                <div className="bg-white rounded-xl p-6 shadow-sm text-center">
+                  <div className="animate-spin h-8 w-8 border-t-2 border-b-2 border-blue-500 rounded-full mx-auto"></div>
+                  <p className="mt-2 text-gray-500">Loading completed orders...</p>
+                </div>
+              ) : completedOrders.length > 0 ? (
+                completedOrders.map(order => (
                   <div key={order.id} className="bg-white rounded-xl p-6 shadow-sm">
                     <div className="flex justify-between items-start mb-4">
                       <div>
-                        <h3 className="font-semibold text-lg">{order.title}</h3>
+                        <h3 className="font-semibold text-lg">{`${order.service_type || 'Assignment'} - ${order.subject_area || 'General'}`}</h3>
                         <p className="text-gray-600">
-                          {order.wordCount.toLocaleString()} words • Completed {new Date(order.dueDate).toLocaleDateString()}
+                          {order.word_count?.toLocaleString()} words • Completed {new Date(order.due_date).toLocaleDateString()}
                         </p>
                       </div>
                       <span className="px-3 py-1 bg-green-100 text-green-600 rounded-full text-sm">
@@ -894,20 +1701,48 @@ const Dashboard = () => {
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">
-                        £{order.price.toFixed(2)}
+                        £{typeof order.price === 'number' ? order.price.toFixed(2) : '0.00'}
                       </span>
                       <div className="flex gap-2">
-                        <button className="px-4 py-2 text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                        <button 
+                          className="px-4 py-2 text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                          onClick={() => {
+                            // In a real app, this would download the files
+                            if (order.files && order.files.length > 0) {
+                              const firstFile = order.files[0];
+                              if (firstFile.url) {
+                                window.open(firstFile.url, '_blank');
+                              } else {
+                                toast.error('Download link not available');
+                              }
+                            } else {
+                              toast.error('No files available for download');
+                            }
+                          }}
+                        >
                           <Download className="h-4 w-4" />
                           Download
                         </button>
-                        <button className="px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-lg">
+                        <button 
+                          className="px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-lg"
+                          onClick={() => {
+                            // In a real app, this would navigate to order details
+                            toast.success(`Viewing details for order ${order.id}`);
+                          }}
+                        >
                           View Details
                         </button>
                       </div>
                     </div>
                   </div>
-                ))}
+                ))
+              ) : (
+                <div className="bg-white rounded-xl p-6 shadow-sm text-center">
+                  <FileCheck className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium mb-1">No completed orders</h3>
+                  <p className="text-gray-500">You don't have any completed orders yet.</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -917,13 +1752,260 @@ const Dashboard = () => {
               <div className="border-b px-6 py-4">
                 <h2 className="text-xl font-bold">Messages</h2>
               </div>
+              
+              {loadingMessages ? (
+                <div className="p-6 text-center">
+                  <div className="animate-spin h-8 w-8 border-t-2 border-b-2 border-blue-500 rounded-full mx-auto"></div>
+                  <p className="mt-2 text-gray-500">Loading messages...</p>
+                </div>
+              ) : messages.length > 0 ? (
+                <div className="p-6">
+                  <div className="space-y-4 max-h-[400px] overflow-y-auto mb-4">
+                    {messages.map((message) => (
+                      <div 
+                        key={message.id}
+                        className={`p-3 rounded-lg ${
+                          message.sender_type === 'user' 
+                            ? 'bg-blue-100 ml-12' 
+                            : 'bg-gray-100 mr-12'
+                        }`}
+                      >
+                        <p className="text-sm">{message.content}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(message.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <form onSubmit={handleSendMessage} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      className="flex-1 p-3 border rounded-lg"
+                      placeholder="Type your message here..."
+                    />
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      Send
+                    </button>
+                  </form>
+                </div>
+              ) : (
               <div className="p-6 text-center text-gray-500">
                 <MessageSquare className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                <p>No messages yet</p>
-              </div>
+                  <p className="mb-4">No messages yet</p>
+                  
+                  <form onSubmit={handleSendMessage} className="flex gap-2 max-w-md mx-auto">
+                    <input
+                      type="text"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      className="flex-1 p-3 border rounded-lg"
+                      placeholder="Send us a message..."
+                    />
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      Send
+                    </button>
+                  </form>
+                  
+                  <div className="mt-8 border-t pt-4">
+                    <p className="text-sm text-gray-600 mb-3">Need to send documents or have urgent matters?</p>
+                    <div className="flex justify-center space-x-4">
+                      <button
+                        onClick={() => window.open('mailto:admin@handywriterz.com', '_blank')}
+                        className="flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        <span>Email Admin</span>
+                      </button>
+                      <button
+                        onClick={handleQuickMessage}
+                        className="flex items-center gap-1 text-green-600 hover:text-green-700"
+                      >
+                        <MessageSquare className="h-4 w-4" />
+                        <span>WhatsApp Support</span>
+                      </button>
+                    </div>
+                    
+                    {/* Email Admin Button with Modal */}
+                    <div className="mt-6">
+                      <button
+                        onClick={() => setShowEmailOption(true)}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 mx-auto flex items-center gap-2"
+                      >
+                        <Send className="h-4 w-4" />
+                        <span>Send Detailed Email</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
+          {/* Email Admin Modal */}
+          {showEmailOption && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-xl max-w-md w-full p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-semibold">Contact Admin</h2>
+                  <button
+                    onClick={() => setShowEmailOption(false)}
+                    className="text-gray-500 hover:text-gray-700"
+                    title="Close modal"
+                    aria-label="Close modal"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                
+                <form 
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleEmailDocuments();
+                  }}
+                  aria-label="Contact admin form"
+                >
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="userName" className="block text-sm font-medium mb-1">Your Name</label>
+                      <input
+                        type="text"
+                        id="userName"
+                        className="w-full p-2 border rounded-md"
+                        value={userName}
+                        readOnly
+                        aria-label="Your name"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="emailAddress" className="block text-sm font-medium mb-1">Email Address</label>
+                      <input
+                        type="email"
+                        id="emailAddress"
+                        value={emailAddress}
+                        onChange={(e) => setEmailAddress(e.target.value)}
+                        className="w-full p-2 border rounded-md"
+                        placeholder="admin@handywriterz.com"
+                        defaultValue="admin@handywriterz.com"
+                        required
+                        aria-label="Admin email address"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="emailSubject" className="block text-sm font-medium mb-1">Subject</label>
+                      <input
+                        type="text"
+                        id="emailSubject"
+                        name="emailSubject"
+                        className="w-full p-2 border rounded-md"
+                        placeholder="Enter subject"
+                        required
+                        aria-label="Email subject"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="emailMessage" className="block text-sm font-medium mb-1">Message</label>
+                      <textarea
+                        id="emailMessage"
+                        value={emailMessage}
+                        onChange={(e) => setEmailMessage(e.target.value)}
+                        className="w-full p-2 border rounded-md resize-none"
+                        rows={5}
+                        placeholder="Your message to the admin..."
+                        required
+                        aria-label="Email message content"
+                      ></textarea>
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="fileUpload" className="block text-sm font-medium mb-1">Attach Files</label>
+                      <input
+                        type="file"
+                        id="fileUpload"
+                        ref={fileInputRef}
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        multiple
+                        title="Select files to attach"
+                        aria-label="Select files to attach"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center gap-2 rounded-md border border-gray-300 px-4 py-2 hover:bg-gray-50 w-full"
+                        aria-label="Select files"
+                      >
+                        <Upload className="h-5 w-5" />
+                        Select Files
+                      </button>
+                      
+                      {(files.length > 0 || uploadedFiles.length > 0) && (
+                        <div className="mt-2 text-sm">
+                          <p className="text-gray-600">
+                            {files.length > 0 && `${files.length} new file(s) selected`}
+                            {files.length > 0 && uploadedFiles.length > 0 && ' • '}
+                            {uploadedFiles.length > 0 && `${uploadedFiles.length} file(s) already uploaded`}
+                          </p>
+                          
+                          {/* Show uploaded files with option to remove */}
+                          {uploadedFiles.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {uploadedFiles.map((file, index) => (
+                                <div key={index} className="flex items-center justify-between text-xs bg-gray-50 p-2 rounded">
+                                  <span className="truncate max-w-[200px]">{file.name}</span>
+                                  <button 
+                                    type="button"
+                                    onClick={() => {
+                                      setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+                                    }}
+                                    className="text-red-500 hover:text-red-700"
+                                    aria-label={`Remove ${file.name}`}
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex justify-end gap-2 mt-6">
+                      <button
+                        type="button"
+                        onClick={() => setShowEmailOption(false)}
+                        className="px-4 py-2 border rounded-md hover:bg-gray-50"
+                        aria-label="Cancel"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-400"
+                        disabled={uploading}
+                        aria-label="Send email"
+                      >
+                        {uploading ? 'Sending...' : 'Send Documents'}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+          
           {/* Settings Tab */}
           {activeTab === 'settings' && (
             <div className="bg-white rounded-xl p-6 shadow-sm">
@@ -931,10 +2013,21 @@ const Dashboard = () => {
               <div className="space-y-6">
                 <div className="flex items-center gap-4">
                   <div className="relative">
-                    <div className="h-20 w-20 bg-gray-100 rounded-full flex items-center justify-center">
+                    <div className="h-20 w-20 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden">
+                      {user?.imageUrl ? (
+                        <img src={user.imageUrl} alt={`${userName}'s profile`} className="h-full w-full object-cover" />
+                      ) : (
                       <User className="h-10 w-10 text-gray-400" />
+                      )}
                     </div>
-                    <button className="absolute bottom-0 right-0 p-2 bg-blue-600 rounded-full text-white">
+                    <button 
+                      className="absolute bottom-0 right-0 p-2 bg-blue-600 rounded-full text-white"
+                      title="Upload profile picture"
+                      onClick={() => {
+                        // This would open Clerk's profile image editor in a real implementation
+                        toast.success('Profile picture uploads would be handled by Clerk in production');
+                      }}
+                    >
                       <Camera className="h-4 w-4" />
                     </button>
                   </div>
@@ -948,17 +2041,38 @@ const Dashboard = () => {
                   <label className="block text-sm font-medium mb-2">Email Address</label>
                   <input
                     type="email"
-                    className="w-full p-3 border rounded-lg"
+                    className="w-full p-3 border rounded-lg bg-gray-50"
                     placeholder="your@email.com"
                     value={userEmail}
+                    readOnly
                     required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">To change your email, please use your account settings</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Full Name</label>
+                  <input
+                    type="text"
+                    className="w-full p-3 border rounded-lg"
+                    placeholder="Your full name"
+                    value={userName}
+                    onChange={(e) => {
+                      // In a real implementation, this would update a state variable
+                      toast.success('Name changes would be handled by Clerk in production');
+                    }}
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium mb-2">Phone Number (Optional)</label>
                   <div className="flex gap-2">
-                    <select className="w-24 p-3 border rounded-lg">
+                    <select 
+                      className="w-24 p-3 border rounded-lg" 
+                      title="Select country code"
+                      value={countryCode}
+                      onChange={(e) => setCountryCode(e.target.value)}
+                    >
                       <option value="+1">+1</option>
                       <option value="+44">+44</option>
                       <option value="+91">+91</option>
@@ -967,6 +2081,8 @@ const Dashboard = () => {
                       type="tel"
                       className="flex-1 p-3 border rounded-lg"
                       placeholder="Phone number"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
                     />
                   </div>
                 </div>
@@ -975,7 +2091,8 @@ const Dashboard = () => {
                   <button 
                     onClick={() => {
                       if (confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
-                        // logout();
+                        // In a real implementation, this would delete the account
+                        toast.error('Account deletion is disabled in demo mode');
                       }
                     }}
                     className="flex items-center gap-2 text-red-600 hover:text-red-700"
@@ -983,22 +2100,62 @@ const Dashboard = () => {
                     <Trash className="h-4 w-4" />
                     <span>Delete Account</span>
                   </button>
-                  <button className="flex items-center gap-2 text-gray-600 hover:text-gray-700">
+                  <button 
+                    className="flex items-center gap-2 text-gray-600 hover:text-gray-700"
+                    onClick={() => toast.success('Account archiving would be implemented in production')}
+                  >
                     <Archive className="h-4 w-4" />
                     <span>Archive Profile</span>
                   </button>
                 </div>
 
                 <div className="flex justify-end gap-3">
-                  <button className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+                  <button 
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                    onClick={() => {
+                      // Reset form
+                      setPhoneNumber('');
+                      setCountryCode('+44');
+                    }}
+                  >
                     Cancel
                   </button>
-                  <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                    Save Changes
+                  <button 
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                    onClick={handleSaveProfile}
+                    disabled={savingProfile}
+                  >
+                    {savingProfile ? (
+                      <>
+                        <div className="animate-spin h-4 w-4 border-t-2 border-b-2 border-white rounded-full"></div>
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <span>Save Changes</span>
+                    )}
                   </button>
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Admin Documents Tab */}
+          {isAdmin && activeTab === 'admin' && <AdminDocuments />}
+
+          {/* Add Admin Tab for Admins */}
+          {isAdmin && (
+            <button 
+              onClick={() => setActiveTab('admin')}
+              className={`w-full flex items-center gap-3 p-2 rounded-lg ${
+                activeTab === 'admin' 
+                  ? 'bg-blue-50 text-blue-600' 
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
+              title="View user documents"
+            >
+              <FileText className="h-5 w-5" />
+              <span>User Documents</span>
+            </button>
           )}
 
           {/* Modals */}
@@ -1014,6 +2171,7 @@ const Dashboard = () => {
                       setShowTurnitinModal(false);
                     }}
                     className="text-gray-500 hover:text-gray-700"
+                    title="Close Turnitin check"
                   >
                     <X size={20} />
                   </button>
@@ -1035,11 +2193,20 @@ const Dashboard = () => {
                         accept=".pdf,.doc,.docx,.txt"
                         className="hidden"
                         id="turnitinFileInput"
+                        title="Upload document for Turnitin check"
                       />
                       
                       <div 
                         onClick={() => turnitinFileInputRef.current?.click()}
                         className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition-colors"
+                        role="button"
+                        tabIndex={0}
+                        title="Select file for Turnitin check"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            turnitinFileInputRef.current?.click();
+                          }
+                        }}
                       >
                         <Upload className="mx-auto h-12 w-12 text-gray-400" />
                         <p className="mt-2 text-sm text-gray-600">
@@ -1064,6 +2231,7 @@ const Dashboard = () => {
                             <button
                               onClick={() => setTurnitinFile(null)}
                               className="text-gray-400 hover:text-gray-500"
+                              title="Remove file"
                             >
                               <X size={16} />
                             </button>

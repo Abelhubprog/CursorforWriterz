@@ -37,12 +37,8 @@ const queryClient = new QueryClient({
   },
 });
 
-// Get Clerk publishable key
-const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-
-if (!publishableKey) {
-  throw new Error("Missing Clerk publishable key");
-}
+// Get Clerk publishable key with fallback
+const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_live_Y2xlcmsuaGFuZHl3cml0ZXJ6LmNvbSQ';
 
 // Create a dedicated router for the application
 // This combines admin routes with mainRouter routes with unique IDs
@@ -75,23 +71,43 @@ const router = createBrowserRouter([
   }
 ]);
 
-// Render the application
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <HelmetProvider>
-      <ClerkProvider 
-        publishableKey={publishableKey}
-        appearance={{
-          variables: { colorPrimary: '#0369a1' },
-        }}
-      >
-        <SupabaseProvider>
-          <QueryClientProvider client={queryClient}>
-            <Toaster />
-            <RouterProvider router={router} />
-          </QueryClientProvider>
-        </SupabaseProvider>
-      </ClerkProvider>
-    </HelmetProvider>
-  </React.StrictMode>
-);
+// Try to render the application, with error handling
+try {
+  const rootElement = document.getElementById('root');
+  if (!rootElement) {
+    throw new Error("Root element not found");
+  }
+  
+  ReactDOM.createRoot(rootElement).render(
+    <React.StrictMode>
+      <HelmetProvider>
+        <ClerkProvider 
+          publishableKey={publishableKey}
+          appearance={{
+            variables: { colorPrimary: '#0369a1' },
+          }}
+        >
+          <SupabaseProvider>
+            <QueryClientProvider client={queryClient}>
+              <Toaster />
+              <RouterProvider router={router} />
+            </QueryClientProvider>
+          </SupabaseProvider>
+        </ClerkProvider>
+      </HelmetProvider>
+    </React.StrictMode>
+  );
+} catch (error) {
+  console.error("Failed to render application:", error);
+  
+  // Render a fallback UI
+  const rootElement = document.getElementById('root');
+  if (rootElement) {
+    rootElement.innerHTML = `
+      <div style="padding: 20px; text-align: center; font-family: system-ui, sans-serif;">
+        <h1 style="color: #0369a1;">HandyWriterz</h1>
+        <p>We're experiencing technical difficulties. Please try again later.</p>
+      </div>
+    `;
+  }
+}

@@ -33,10 +33,10 @@ const LoadingFallback = () => <LoadingSpinner size="lg" className="fixed top-1/2
  * Handles admin dashboard routing with Clerk auth and Supabase content management
  */
 const AdminRoutes: React.FC = () => {
-  const { isAdmin, isLoading, isAuthenticated } = useAuth();
+  const { isAdmin, loading, isAuthenticated } = useAuth();
 
   // Show minimal loading state
-  if (isLoading) {
+  if (loading) {
     return <LoadingSpinner size="lg" className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />;
   }
 

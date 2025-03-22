@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { logger } from '../lib/logger';
-import { NotificationService } from './notificationService';
+import { notificationService } from './notificationService';
 import { createCharge } from './paymentService';
 import { TelegramBotService } from './telegramBotService';
 
@@ -200,7 +200,7 @@ export class AiScoreChecker {
         take: 10
       });
 
-      return scores.map(score => ({
+      return scores.map((score: any) => ({
         score: score.score,
         analysis: score.analysis as AiScoreResult['analysis'],
         status: score.status

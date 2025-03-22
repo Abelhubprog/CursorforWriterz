@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { telegramConfig } from '../config/telegram';
 import { TelegramBotService } from './telegramBotService';
-import { StorageService } from './storageService';
+import { storageService } from './storageService';
 
 const prisma = new PrismaClient();
 
@@ -83,7 +83,7 @@ export class TelegramRetryService {
       });
 
       // Get the original file from storage
-      const fileData = await StorageService.getFile(request.fileKey);
+      const fileData = await storageService.getFile(request.fileKey);
 
       // Retry sending to Telegram
       await TelegramBotService.sendDocument(
@@ -140,7 +140,7 @@ export class TelegramRetryService {
       });
 
       // Get the original file from storage
-      const fileData = await StorageService.getFile(request.fileKey);
+      const fileData = await storageService.getFile(request.fileKey);
 
       // Retry sending to Telegram
       await TelegramBotService.sendDocument(

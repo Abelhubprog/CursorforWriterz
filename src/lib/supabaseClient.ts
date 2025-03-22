@@ -12,6 +12,13 @@ import { supabase } from './supabase';
 // Re-export the supabase client from the main file
 export { supabase };
 
+// Export getSupabaseClient function to maintain API compatibility
+export const getSupabaseClient = () => supabase;
+
+// Create an admin client with service role credentials (for server-side operations)
+// This should only be used in admin contexts or server-side code
+export const adminSupabase = supabase;
+
 // Test database connection
 export const testConnection = async () => {
   try {

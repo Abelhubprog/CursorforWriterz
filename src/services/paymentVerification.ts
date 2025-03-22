@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   const headerList = headers();
   const wh = new Webhook(process.env.COINBASE_WEBHOOK_SECRET!);
   
-  if (!verifyCoinbaseSignature(rawBody, headerList.get('cb-signature')!)) {
+  if (!verifyCoinbaseSignature(rawBody, (await headerList).get('cb-signature')!)) {
     return new Response('Invalid signature', { status: 401 });
   }
 
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     const payload = JSON.parse(rawBody);
     const event = wh.verify(
       rawBody,
-      headerList.get('svix-signature')!
+      (await headerList).get('svix-signature')!
     ) as WebhookEvent;
 
     await prisma.payment.create({

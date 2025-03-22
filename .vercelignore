@@ -4,41 +4,42 @@ node_modules
 
 # Testing
 __tests__
-test
-tests
 coverage
+test
 
-# Build output
+# Build outputs
 dist
 build
 .next
 out
 
 # Development files
-*.log
-.DS_Store
 .env.local
 .env.development
-.env.test
-
-# Debug files
+.env.mcp
+.env.fixed
+.env.example
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+pnpm-debug.log*
 
-# Editor directories
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
 .idea
-.vscode
-*.swp
-*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 # System Files
 .DS_Store
 Thumbs.db
 
-# Canvas-related files (to prevent build issues)
-**/node_modules/canvas
-**/node_modules/**/canvas
-**/node_modules/*canvas*
-**/node_modules/**/*canvas* 
+# Specific exclusions for build issues
+node_modules/canvas
+node_modules/**/node-canvas
+node_modules/**/canvas 
