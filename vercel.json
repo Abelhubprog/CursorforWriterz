@@ -16,10 +16,10 @@
     }
   ],
   "env": {
-    "VITE_SUPABASE_URL": "@supabase_url",
-    "VITE_SUPABASE_ANON_KEY": "@supabase_anon_key",
-    "VITE_CLERK_PUBLISHABLE_KEY": "@clerk_publishable_key",
-    "VITE_APP_URL": "@app_url",
+    "VITE_SUPABASE_URL": "${VITE_SUPABASE_URL}",
+    "VITE_SUPABASE_ANON_KEY": "${VITE_SUPABASE_ANON_KEY}",
+    "VITE_CLERK_PUBLISHABLE_KEY": "${VITE_CLERK_PUBLISHABLE_KEY}",
+    "VITE_APP_URL": "${VITE_APP_URL}",
     "VITE_APP_NAME": "HandyWriterz",
     "VITE_ENABLE_PUBLIC_ACCESS": "true",
     "VITE_ENABLE_QUERY_CACHING": "true",

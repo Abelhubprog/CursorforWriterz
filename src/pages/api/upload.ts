@@ -22,6 +22,12 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
+if (!import.meta.env.VITE_ADMIN_EMAIL) {
+  throw new Error('VITE_ADMIN_EMAIL is required');
+}
+
+const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -160,7 +166,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Send email with files to admin
     await sendEmailWithFiles(
       session.user.email || 'unknown@example.com',
-      process.env.VITE_ADMIN_EMAIL || 'handywriterz@gmail.com',
+      adminEmail,
       `New submission from ${session.user.name || 'User'}`,
       `A new submission has been received with ID: ${submission.id}. Please check the attached files.`,
       fileInfos,

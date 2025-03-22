@@ -1,7 +1,10 @@
 import { ClerkProvider as BaseClerkProvider } from '@clerk/clerk-react';
 import { dark } from '@clerk/themes';
 import { useTheme } from '@/hooks/useTheme';
-import { toast } from 'react-hot-toast';
+
+if (!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY) {
+  throw new Error('Missing Clerk Publishable Key');
+}
 
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -16,14 +19,6 @@ const isLocalhost = typeof window !== 'undefined' && (
 const isDevKey = (key: string | undefined) => {
   return key?.includes('pk_test_') || key?.includes('clerk.daring-goshawk-70.accounts.dev');
 };
-
-if (!publishableKey) {
-  console.error('Missing Clerk Publishable Key');
-  // Only throw in development, in production we'll show a toast
-  if (isDevelopment) {
-    throw new Error('Missing Clerk Publishable Key');
-  }
-}
 
 // Check if using development key in production
 if (!isDevelopment && !isLocalhost && isDevKey(publishableKey)) {
@@ -50,17 +45,7 @@ export function ClerkProvider({ children }: { children: React.ReactNode }) {
       publishableKey={publishableKey}
       appearance={{
         baseTheme: theme === 'dark' ? dark : undefined,
-        elements: {
-          formButtonPrimary: 'bg-primary hover:bg-primary/90',
-          card: 'bg-background',
-          headerTitle: 'text-foreground',
-          headerSubtitle: 'text-muted-foreground',
-          socialButtonsBlockButton: 'bg-muted text-muted-foreground hover:bg-muted/90',
-          dividerLine: 'bg-border',
-          formFieldLabel: 'text-foreground',
-          formFieldInput: 'bg-input border-input',
-          footerActionLink: 'text-primary hover:text-primary/90',
-        },
+        variables: { colorPrimary: '#0F172A' },
       }}
     >
       {children}

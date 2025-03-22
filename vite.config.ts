@@ -7,17 +7,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Load environment variables
   const env = loadEnv(mode, process.cwd(), '');
   
   console.log(`Building for ${mode} mode`);
-  
-  // Define fallback values for critical environment variables
-  const envDefaults = {
-    VITE_SUPABASE_URL: 'https://thvgjcnrlfofioagjydk.supabase.co',
-    VITE_SUPABASE_ANON_KEY: env.VITE_SUPABASE_ANON_KEY || 'production-key',
-    VITE_CLERK_PUBLISHABLE_KEY: env.VITE_CLERK_PUBLISHABLE_KEY || 'production-key',
-  };
   
   return {
     plugins: [react()],
@@ -37,14 +29,13 @@ export default defineConfig(({ mode }) => {
       }
     },
     define: {
-      // Ensure environment variables have defaults
-      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL || envDefaults.VITE_SUPABASE_URL),
-      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY || envDefaults.VITE_SUPABASE_ANON_KEY),
-      'import.meta.env.VITE_CLERK_PUBLISHABLE_KEY': JSON.stringify(env.VITE_CLERK_PUBLISHABLE_KEY || envDefaults.VITE_CLERK_PUBLISHABLE_KEY),
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
+      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
+      'import.meta.env.VITE_CLERK_PUBLISHABLE_KEY': JSON.stringify(env.VITE_CLERK_PUBLISHABLE_KEY),
     },
     build: {
       outDir: 'dist',
-      sourcemap: false,
+      sourcemap: true,
       minify: true,
       // Don't fail on warnings
       reportCompressedSize: false,
@@ -53,6 +44,7 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks: {
             'react-vendor': ['react', 'react-dom'],
+            'supabase-vendor': ['@supabase/supabase-js'],
             'ui-components': [
               '@/components/ui/button',
               '@/components/ui/card',
@@ -74,6 +66,10 @@ export default defineConfig(({ mode }) => {
         '@clerk/clerk-react',
         '@supabase/supabase-js'
       ]
-    }
+    },
+    server: {
+      port: 5173,
+      host: true,
+    },
   };
 });
