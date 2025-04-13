@@ -1,0 +1,12 @@
+modules = ["nodejs-18", "bash"]
+run = "pnpm run dev"
+
+[nix]
+channel = "stable-24_05"
+
+[deployment]
+run = ["sh", "-c", "pnpm run dev"]
+
+[[ports]]
+localPort = 5173
+externalPort = 80
