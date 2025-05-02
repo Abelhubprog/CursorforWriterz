@@ -1,6 +1,6 @@
 # HandyWriterz Admin Portal and Content Management System
 
-A comprehensive admin portal and content management system for HandyWriterz, built with React, TypeScript, Clerk for authentication, and Appwrite for backend services.
+A comprehensive admin portal and content management system for HandyWriterz, built with React, TypeScript, Clerk for authentication, and Supabase for backend services.
 
 ![HandyWriterz Admin Dashboard](https://example.com/dashboard-preview.png)
 
@@ -32,15 +32,15 @@ A comprehensive admin portal and content management system for HandyWriterz, bui
 - Accessible interface with proper ARIA support
 
 ### Integration
-- Seamless integration with Appwrite for backend services
+- Seamless integration with Supabase for backend services
 - Real-time updates and notifications
-- Data synchronization between Clerk and Appwrite
+- Data synchronization between Clerk and Supabase
 
 ## 🛠️ Tech Stack
 
 - **Frontend**: React, TypeScript, TailwindCSS
 - **Authentication**: Clerk
-- **Backend & Database**: Appwrite
+- **Backend & Database**: Supabase
 - **State Management**: React Context API & useState
 - **UI Components**: Custom components with TailwindCSS
 - **Icons**: Lucide React
@@ -52,7 +52,7 @@ A comprehensive admin portal and content management system for HandyWriterz, bui
 
 - Node.js 16.x or higher
 - npm/yarn/pnpm
-- Appwrite account
+- Supabase account
 - Clerk account
 
 ## 🔧 Installation
@@ -87,15 +87,15 @@ VITE_APPWRITE_ENDPOINT=https://cloud.appwrite.io/v1
 VITE_APPWRITE_PROJECT_ID=your_appwrite_project_id
 ```
 
-4. **Initialize Appwrite Collections**
+4. **Initialize Supabase Tables**
 
-Run the initialization script to set up all the required Appwrite collections, buckets, and indexes:
+Run the initialization script to set up all the required Supabase tables and policies:
 
 ```bash
-node scripts/initAppwrite.js
+node scripts/initSupabase.js
 ```
 
-This will set up all required collections and indexes in your Appwrite project.
+This will set up all required tables and RLS policies in your Supabase project.
 
 5. **Start the development server**
 
@@ -109,14 +109,11 @@ yarn dev
 
 ## ⚙️ Configuration
 
-### Appwrite Setup
+### Supabase Setup
 
-1. Create an Appwrite project in the [Appwrite Console](https://cloud.appwrite.io/)
-2. Create an API key with the following permissions:
-   - Databases: Read & Write
-   - Storage: Read & Write
-   - Users: Read & Write
-3. Create the necessary buckets in Storage:
+1. Create a Supabase project in the [Supabase Dashboard](https://app.supabase.com)
+2. Get your project URL and anon key from the project settings
+3. Create the necessary storage buckets:
    - `media`: For storing images, videos, and general media files
    - `documents`: For storing documents like PDFs, Word files, etc.
    - `avatars`: For storing user avatars
@@ -258,16 +255,18 @@ Create a `.env` file with the following variables:
 # Clerk Authentication
 VITE_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
 
-# Appwrite Configuration
-VITE_APPWRITE_ENDPOINT=https://cloud.appwrite.io/v1
-VITE_APPWRITE_PROJECT_ID=your_appwrite_project_id
-VITE_APPWRITE_DATABASE_ID=your-database-id
-VITE_APPWRITE_POSTS_COLLECTION_ID=posts
-VITE_APPWRITE_CATEGORIES_COLLECTION_ID=categories
-VITE_APPWRITE_COMMENTS_COLLECTION_ID=comments
-VITE_APPWRITE_LIKES_COLLECTION_ID=likes
-VITE_APPWRITE_VIEWS_COLLECTION_ID=views
-VITE_APPWRITE_PROFILES_COLLECTION_ID=profiles
+# Supabase Configuration
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Database Tables (these are automatically created by the setup script)
+# - posts
+# - categories
+# - comments
+# - likes
+# - views
+# - profiles
 ```
 
 ### 3. Run The Setup Script
@@ -305,60 +304,63 @@ Stores blog posts and service content:
 - `commentsCount`: Number of comments
 - `viewsCount`: Number of views
 
-### Categories Collection
+### Categories Table
 
-Organizes posts into categories:
+Stores content categories:
 
-- `id`: Unique identifier (auto-generated)
-- `name`: Category name (required)
-- `slug`: URL-friendly version of the name (required)
-- `description`: Category description
-- `serviceType`: Type of service
-- `postCount`: Number of posts in the category
+- `id`: UUID primary key (auto-generated)
+- `name`: Category name (required, unique)
+- `slug`: URL-friendly version of name (required, unique)
+- `description`: Category description text
+- `service_type`: ENUM of service types
+- `post_count`: Integer counter (updated via trigger)
 
-### Comments Collection
+### Comments Table
 
 Stores user comments on posts:
 
-- `id`: Unique identifier (auto-generated)
-- `postId`: Reference to the post (required)
-- `authorId`: Reference to the user profile (required)
+- `id`: UUID primary key (auto-generated)
+- `post_id`: UUID foreign key reference to posts table (required)
+- `author_id`: UUID foreign key reference to profiles table (required)
 - `content`: Comment text (required)
-- `createdAt`: Creation timestamp
+- `created_at`: Timestamp with timezone (auto-generated)
 - `likesCount`: Number of likes
 
-### Likes Collection
+### Likes Table
 
-Tracks which posts users have liked:
+Stores user likes on posts and comments:
 
-- `id`: Unique identifier (auto-generated)
-- `postId`: Reference to the post (required)
-- `userId`: Reference to the user profile (required)
-- `createdAt`: Creation timestamp
+- `id`: UUID primary key (auto-generated)
+- `target_id`: UUID foreign key reference to posts or comments table (required)
+- `target_type`: ENUM ('post' or 'comment')
+- `user_id`: UUID foreign key reference to profiles table (required)
+- `created_at`: Timestamp with timezone (auto-generated)
 
-### Views Collection
+### Views Table
 
 Tracks post views:
 
-- `id`: Unique identifier (auto-generated)
-- `postId`: Reference to the post (required)
-- `userId`: Reference to the user profile (optional)
-- `viewedAt`: Timestamp of the view
+- `id`: UUID primary key (auto-generated)
+- `post_id`: UUID foreign key reference to posts table (required)
+- `user_id`: UUID foreign key reference to profiles table (optional)
+- `viewed_at`: Timestamp with timezone (auto-generated)
+- `ip_address`: IP address of viewer (anonymized)
+- `user_agent`: Browser user agent string
 
-### Profiles Collection
+### Profiles Table
 
 User profiles for the application:
 
-- `id`: Unique identifier (auto-generated)
-- `userId`: Reference to the authentication user ID
-- `email`: User email (required)
-- `fullName`: User's full name
-- `avatarUrl`: URL to the user's avatar
-- `role`: User role (user, editor, admin)
+- `id`: UUID primary key (matches auth.users.id)
+- `email`: User's email address (unique)
+- `full_name`: User's full name
+- `avatar_url`: URL to user's avatar in storage
+- `bio`: User's biography text
+- `role`: ENUM ('admin', 'editor', 'user')
+- `created_at`: Timestamp with timezone (auto-generated)
+- `updated_at`: Timestamp with timezone (auto-updated)
 - `status`: Account status (active, inactive, pending)
 - `lastLoginAt`: Last login timestamp
-- `createdAt`: Creation timestamp
-- `updatedAt`: Last update timestamp
 
 ## User Roles
 
@@ -367,6 +369,28 @@ The application supports the following user roles:
 - **Admin**: Can create, edit, and delete all content; manage users
 - **Editor**: Can create and edit content
 - **User**: Can view published content, like, and comment
+
+### Posts Table
+
+Stores all content posts:
+
+- `id`: UUID primary key (auto-generated)
+- `title`: Post title (required)
+- `slug`: URL-friendly version of title (required, unique)
+- `content`: Post content in markdown format
+- `excerpt`: Short description for previews
+- `author_id`: UUID foreign key reference to profiles table
+- `category_id`: UUID foreign key reference to categories table
+- `status`: ENUM ('draft', 'published', 'archived')
+- `published_at`: Timestamp with timezone
+- `created_at`: Timestamp with timezone (auto-generated)
+- `updated_at`: Timestamp with timezone (auto-updated)
+- `likes_count`: Integer counter (updated via trigger)
+- `comments_count`: Integer counter (updated via trigger)
+- `views_count`: Integer counter (updated via trigger)
+- `meta_title`: SEO title
+- `meta_description`: SEO description
+- `featured_image`: URL to featured image in storage
 
 ## Component Architecture
 
@@ -399,7 +423,7 @@ The HandyWriterz platform includes a powerful admin dashboard for managing conte
 
 1. **Database Setup**
 
-   The admin dashboard requires specific database tables. You can set these up by running our script:
+   The admin dashboard requires specific database tables and Row Level Security (RLS) policies. Set these up by running our migration script:
 
    ```bash
    node scripts/setup_db.js
@@ -407,7 +431,9 @@ The HandyWriterz platform includes a powerful admin dashboard for managing conte
 
    This script will:
    - Create all necessary tables in your Supabase project
-   - Set up the correct permissions
+   - Set up RLS policies for secure access control
+   - Create necessary database functions and triggers
+   - Set up storage bucket policies
    - Optionally create an admin user
    - Optionally seed sample data for service pages
 
@@ -501,9 +527,11 @@ The platform supports various content types optimized for different service page
 If you encounter issues with the admin dashboard:
 
 1. Check Supabase connection in the browser console
-2. Verify database tables were created correctly
-3. Ensure your user has admin permissions
-4. Check for any JavaScript errors in the console
+2. Verify database tables and RLS policies were created correctly in Supabase Dashboard
+3. Ensure your user has admin role in the profiles table
+4. Check storage bucket permissions in Supabase Dashboard
+5. Verify environment variables are set correctly
+6. Check for any JavaScript errors in the console
 
 For additional help, please contact support.
 
