@@ -1,0 +1,24 @@
+modules = ["nodejs-18", "bash"]
+run = "pnpm run dev"
+
+[nix]
+channel = "stable-24_05"
+
+[deployment]
+run = ["sh", "-c", "pnpm run dev"]
+
+[[ports]]
+localPort = 5173
+externalPort = 80
+
+[workflows]
+runButton = "Deploy"
+
+[[workflows.workflow]]
+name = "Deploy"
+author = 36294645
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm replit-deploy"
