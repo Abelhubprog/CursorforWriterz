@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:vercel": "tsc && vite build",
     "preview": "vite preview",
     "start": "vite preview"
   },
