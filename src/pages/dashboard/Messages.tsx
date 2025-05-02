@@ -919,9 +919,6 @@ const Messages: React.FC = () => {
 };
 
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
 
   const fetchConversations = async () => {
     try {
@@ -2404,4 +2401,4 @@ const Messages: React.FC = () => {
   );
 };
 
-export default Messages; 
+export default Messages;
