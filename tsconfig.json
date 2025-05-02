@@ -23,7 +23,7 @@
       "@/*": ["src/*"],
       "@/components/*": ["src/components/*"],
       "@/lib/*": ["src/lib/*"],
-      "@/utils/*": ["src/lib/utils/*"],
+      "@/utils/*": ["src/utils/*"],
       "@/types/*": ["src/types/*"],
       "@/styles/*": ["src/styles/*"],
       "@/hooks/*": ["src/hooks/*"],
@@ -32,7 +32,8 @@
       "@/assets/*": ["src/assets/*"],
       "@/admin/*": ["src/admin/*"]
     },
-    "types": ["node", "react", "react-dom", "vite/client", "jest"]
+    "types": ["node", "react", "react-dom", "vite/client", "jest"],
+    "forceConsistentCasingInFileNames": true
   },
   "include": [
     "src/**/*.ts",

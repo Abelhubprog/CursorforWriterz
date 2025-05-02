@@ -1,86 +1,63 @@
 import React, { useState, useEffect } from 'react';
-import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiFilter } from 'react-icons/fi';
-import { contentService } from '@/services/contentService';
 import { supabase } from '@/lib/supabase';
+import { FiPlus, FiTrash2, FiEdit2, FiSave, FiX } from 'react-icons/fi';
 import { useToast } from '@/components/ui/toast/use-toast';
 
 interface Category {
   id: string;
   name: string;
   slug: string;
-  service: string;
   description?: string;
-  count?: number;
+  service_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Service {
+  id: string;
+  title: string;
+  slug: string;
 }
 
 const Categories: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
-  const [services, setServices] = useState<string[]>([]);
-  const [serviceFilter, setServiceFilter] = useState('');
-  const [searchFilter, setSearchFilter] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [formData, setFormData] = useState<Omit<Category, 'id'>>({
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [newCategory, setNewCategory] = useState({
     name: '',
-    slug: '',
-    service: '',
-    description: ''
+    description: '',
+    service_id: ''
   });
   const { toast } = useToast();
 
+  // Fetch categories and services
   useEffect(() => {
     fetchCategories();
-    loadServices();
-  }, [serviceFilter]);
-
-  const loadServices = async () => {
-    try {
-      // Get available service types from our database
-      const { data: serviceData, error } = await supabase
-        .from('posts')
-        .select('service_type')
-        .is('service_type', 'not.null');
-        
-      if (error) throw error;
-      
-      if (serviceData) {
-        // Extract unique service types
-        const uniqueServices = Array.from(
-          new Set(serviceData.map(item => item.service_type))
-        ).filter(Boolean) as string[];
-        
-        // Add predefined services if they don't exist in the data
-        const defaultServices = [
-          'adult-health-nursing', 
-          'mental-health-nursing', 
-          'child-nursing', 
-          'crypto', 
-          'ai'
-        ];
-        
-        const combinedServices = Array.from(
-          new Set([...uniqueServices, ...defaultServices])
-        ).sort();
-        
-        setServices(combinedServices);
-      }
-    } catch (error) {
-      console.error('Error loading services:', error);
-    }
-  };
+    fetchServices();
+  }, []);
 
   const fetchCategories = async () => {
-    setLoading(true);
     try {
-      const data = await contentService.getCategories(serviceFilter || undefined);
-      setCategories(data);
+      const { data, error } = await supabase
+        .from('categories')
+        .select(`
+          *,
+          services (
+            id,
+            title,
+            slug
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setCategories(data || []);
     } catch (error) {
       console.error('Error fetching categories:', error);
       toast({
         title: 'Error',
-        description: 'Failed to fetch categories. Please try again.',
+        description: 'Failed to load categories',
         variant: 'destructive'
       });
     } finally {
@@ -88,352 +65,325 @@ const Categories: React.FC = () => {
     }
   };
 
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    
-    if (name === 'name' && formMode === 'create') {
-      // Auto-generate slug from name
-      const slug = contentService.createSlug(value);
-      setFormData(prev => ({ ...prev, [name]: value, slug }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
-    }
-  };
-
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      slug: '',
-      service: '',
-      description: ''
-    });
-    setSelectedCategory(null);
-    setFormMode('create');
-    setShowForm(false);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!formData.name || !formData.slug || !formData.service) {
-      toast({
-        title: 'Validation Error',
-        description: 'Name, slug, and service are required fields.',
-        variant: 'destructive'
-      });
-      return;
-    }
-    
+  const fetchServices = async () => {
     try {
-      if (formMode === 'create') {
-        await contentService.createCategory(formData);
-        toast({
-          title: 'Category created',
-          description: 'The category has been successfully created.'
-        });
-      } else if (formMode === 'edit' && selectedCategory) {
-        await contentService.updateCategory(selectedCategory.id, formData);
-        toast({
-          title: 'Category updated',
-          description: 'The category has been successfully updated.'
-        });
-      }
-      
-      // Refresh the category list
-      fetchCategories();
-      resetForm();
+      const { data, error } = await supabase
+        .from('services')
+        .select('*')
+        .order('title');
+
+      if (error) throw error;
+      setServices(data || []);
     } catch (error) {
-      console.error('Error saving category:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to save category. Please try again.',
-        variant: 'destructive'
-      });
+      console.error('Error fetching services:', error);
     }
   };
 
-  const handleEdit = (category: Category) => {
-    setSelectedCategory(category);
-    setFormData({
-      name: category.name,
-      slug: category.slug,
-      service: category.service,
-      description: category.description || ''
-    });
-    setFormMode('edit');
-    setShowForm(true);
-  };
-
-  const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this category? Any content assigned to this category will be affected.')) {
-      try {
-        await contentService.deleteCategory(id);
+  const handleCreateCategory = async () => {
+    try {
+      if (!newCategory.name || !newCategory.service_id) {
         toast({
-          title: 'Category deleted',
-          description: 'The category has been successfully deleted.'
-        });
-        fetchCategories();
-      } catch (error) {
-        console.error('Error deleting category:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to delete category. Please try again.',
+          title: 'Validation Error',
+          description: 'Name and service are required',
           variant: 'destructive'
         });
+        return;
       }
+
+      const { data, error } = await supabase
+        .from('categories')
+        .insert([
+          {
+            name: newCategory.name,
+            description: newCategory.description,
+            service_id: newCategory.service_id,
+            slug: newCategory.name.toLowerCase().replace(/\s+/g, '-')
+          }
+        ])
+        .select();
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: 'Category created successfully'
+      });
+
+      setNewCategory({ name: '', description: '', service_id: '' });
+      await fetchCategories();
+    } catch (error) {
+      console.error('Error creating category:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create category',
+        variant: 'destructive'
+      });
     }
   };
 
-  const filteredCategories = categories.filter(category => 
-    category.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
-    category.description?.toLowerCase().includes(searchFilter.toLowerCase())
-  );
+  const handleUpdateCategory = async (id: string, updates: Partial<Category>) => {
+    try {
+      const { error } = await supabase
+        .from('categories')
+        .update(updates)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: 'Category updated successfully'
+      });
+
+      setEditingId(null);
+      await fetchCategories();
+    } catch (error) {
+      console.error('Error updating category:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update category',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this category?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('categories')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: 'Category deleted successfully'
+      });
+
+      await fetchCategories();
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete category',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="sm:flex sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Categories</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Manage content categories and organization
-          </p>
-        </div>
-        <div className="mt-4 sm:mt-0">
-          <button
-            type="button"
-            onClick={() => {
-              resetForm();
-              setShowForm(true);
-              setFormMode('create');
-            }}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            <FiPlus className="-ml-1 mr-2 h-5 w-5" />
-            Add Category
-          </button>
-        </div>
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="sm:flex sm:items-center sm:justify-between mb-8">
+        <h1 className="text-2xl font-bold text-gray-900">Categories</h1>
       </div>
-      
-      {/* Form */}
-      {showForm && (
-        <div className="bg-white shadow rounded-lg p-6 mb-6">
-          <h2 className="text-lg font-medium mb-4">
-            {formMode === 'create' ? 'Add New Category' : 'Edit Category'}
-          </h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleFormChange}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="slug" className="block text-sm font-medium text-gray-700">
-                  Slug
-                </label>
-                <input
-                  type="text"
-                  id="slug"
-                  name="slug"
-                  value={formData.slug}
-                  onChange={handleFormChange}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  required
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  URL-friendly version of the name. Use only lowercase letters, numbers, and hyphens.
-                </p>
-              </div>
-            </div>
-            
-            <div>
-              <label htmlFor="service" className="block text-sm font-medium text-gray-700">
-                Service
-              </label>
-              <select
-                id="service"
-                name="service"
-                value={formData.service}
-                onChange={handleFormChange}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                required
-                aria-label="Select service"
-              >
-                <option value="">Select a service</option>
-                {services.map(service => (
-                  <option key={service} value={service}>{service}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-                Description
-              </label>
-              <textarea
-                id="description"
-                name="description"
-                value={formData.description}
-                onChange={handleFormChange}
-                rows={3}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              ></textarea>
-            </div>
-            
-            <div className="flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={resetForm}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                {formMode === 'create' ? 'Create Category' : 'Update Category'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-      
-      {/* Filters */}
-      <div className="bg-white shadow rounded-lg p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
-            <label htmlFor="search" className="sr-only">
-              Search categories
+
+      {/* Create new category form */}
+      <div className="bg-white shadow rounded-lg p-6 mb-8">
+        <h2 className="text-lg font-medium text-gray-900 mb-4">Create New Category</h2>
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+              Name
             </label>
-            <div className="relative rounded-md shadow-sm">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <FiSearch className="h-5 w-5 text-gray-400" />
-              </div>
-              <input
-                type="text"
-                id="search"
-                className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Search categories..."
-                value={searchFilter}
-                onChange={(e) => setSearchFilter(e.target.value)}
-              />
-            </div>
+            <input
+              type="text"
+              id="name"
+              value={newCategory.name}
+              onChange={(e) => setNewCategory(prev => ({ ...prev, name: e.target.value }))}
+              className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            />
           </div>
-          
-          <div className="sm:w-64">
-            <label htmlFor="service-filter" className="sr-only">
-              Filter by service
+
+          <div>
+            <label htmlFor="service" className="block text-sm font-medium text-gray-700">
+              Service
             </label>
             <select
-              id="service-filter"
-              value={serviceFilter}
-              onChange={(e) => setServiceFilter(e.target.value)}
-              className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              aria-label="Filter by service"
+              id="service"
+              value={newCategory.service_id}
+              onChange={(e) => setNewCategory(prev => ({ ...prev, service_id: e.target.value }))}
+              className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             >
-              <option value="">All Services</option>
+              <option value="">Select a service</option>
               {services.map((service) => (
-                <option key={service} value={service}>
-                  {service}
+                <option key={service.id} value={service.id}>
+                  {service.title}
                 </option>
               ))}
             </select>
           </div>
+
+          <div className="sm:col-span-2">
+            <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+              Description
+            </label>
+            <textarea
+              id="description"
+              rows={3}
+              value={newCategory.description}
+              onChange={(e) => setNewCategory(prev => ({ ...prev, description: e.target.value }))}
+              className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <button
+            type="button"
+            onClick={handleCreateCategory}
+            className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <FiPlus className="-ml-1 mr-2 h-5 w-5" />
+            Create Category
+          </button>
         </div>
       </div>
-      
-      {/* Categories List */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-        {loading ? (
-          <div className="p-6 text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-blue-600"></div>
-            <p className="mt-2 text-gray-500">Loading categories...</p>
-          </div>
-        ) : filteredCategories.length === 0 ? (
-          <div className="p-6 text-center">
-            <p className="text-gray-500">
-              {searchFilter || serviceFilter
-                ? 'No categories found matching your filters.'
-                : 'No categories found. Create your first category to get started.'}
-            </p>
-          </div>
-        ) : (
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Slug
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Service
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Description
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-              {filteredCategories.map((category) => (
-                <tr key={category.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{category.name}</div>
-                    </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {category.slug}
-                    </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {category.service}
-                    </td>
-                  <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
-                    {category.description || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex justify-end space-x-2">
-                          <button
-                        type="button"
-                        onClick={() => handleEdit(category)}
-                        className="text-indigo-600 hover:text-indigo-900"
-                        title="Edit category"
+
+      {/* Categories list */}
+      <div className="bg-white shadow rounded-lg overflow-hidden">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Name
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Service
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Description
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {categories.map((category) => (
+              <tr key={category.id}>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                  {editingId === category.id ? (
+                    <input
+                      type="text"
+                      value={category.name}
+                      title={`Edit ${category.name}`}
+                      aria-label={`Edit category name ${category.name}`}
+                      onChange={(e) => {
+                        const updatedCategories = categories.map(c =>
+                          c.id === category.id ? { ...c, name: e.target.value } : c
+                        );
+                        setCategories(updatedCategories);
+                      }}
+                      className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    />
+                  ) : (
+                    <div className="text-sm font-medium text-gray-900">{category.name}</div>
+                  )}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {editingId === category.id ? (
+                    <select
+                      value={category.service_id}
+                      title="Select service"
+                      aria-label="Select service for category"
+                      onChange={(e) => {
+                        const updatedCategories = categories.map(c =>
+                          c.id === category.id ? { ...c, service_id: e.target.value } : c
+                        );
+                        setCategories(updatedCategories);
+                      }}
+                      className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    >
+                      {services.map((service) => (
+                        <option key={service.id} value={service.id}>
+                          {service.title}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="text-sm text-gray-500">
+                      {services.find(s => s.id === category.service_id)?.title}
+                    </div>
+                  )}
+                </td>
+                <td className="px-6 py-4">
+                  {editingId === category.id ? (
+                    <textarea
+                      value={category.description || ''}
+                      title={`Edit description for ${category.name}`}
+                      aria-label={`Edit category description for ${category.name}`}
+                      onChange={(e) => {
+                        const updatedCategories = categories.map(c =>
+                          c.id === category.id ? { ...c, description: e.target.value } : c
+                        );
+                        setCategories(updatedCategories);
+                      }}
+                      className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      rows={2}
+                    />
+                  ) : (
+                    <div className="text-sm text-gray-500">{category.description}</div>
+                  )}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  {editingId === category.id ? (
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => handleUpdateCategory(category.id, category)}
+                        className="text-green-600 hover:text-green-900"
+                        title="Save changes"
+                        aria-label="Save changes"
+                      >
+                        <FiSave className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => setEditingId(null)}
+                        className="text-gray-600 hover:text-gray-900"
+                        title="Cancel editing"
+                        aria-label="Cancel editing"
+                      >
+                        <FiX className="h-5 w-5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => setEditingId(category.id)}
+                        className="text-blue-600 hover:text-blue-900"
+                        title={`Edit ${category.name}`}
                         aria-label={`Edit category ${category.name}`}
-                          >
-                            <FiEdit2 className="h-5 w-5" />
-                          </button>
-                          <button
-                        type="button"
-                        onClick={() => handleDelete(category.id)}
-                            className="text-red-600 hover:text-red-900"
-                        title="Delete category"
+                      >
+                        <FiEdit2 className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCategory(category.id)}
+                        className="text-red-600 hover:text-red-900"
+                        title={`Delete ${category.name}`}
                         aria-label={`Delete category ${category.name}`}
-                          >
-                            <FiTrash2 className="h-5 w-5" />
-                          </button>
-                        </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-        )}
+                      >
+                        <FiTrash2 className="h-5 w-5" />
+                      </button>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 };
 
-export default Categories; 
+export default Categories;

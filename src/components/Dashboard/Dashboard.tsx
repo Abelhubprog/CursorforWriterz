@@ -48,7 +48,7 @@ const AdminDocuments = () => {
 
 const Dashboard = () => {
   const { user } = useUser();
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn, signOut } = useAuth();
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState('orders');
@@ -231,7 +231,10 @@ const Dashboard = () => {
 
   const handleUploadSubmit = async () => {
     if (files.length === 0) {
-      toast.error('Please select files to upload');
+          toast.error('Please select files to upload', {
+            id: 'upload-error',
+            duration: 3000
+          });
       return;
     }
     
@@ -563,7 +566,10 @@ const Dashboard = () => {
             sender_type: 'system',
             is_read: false
           });
-          toast.info('Our team has been notified and will assist you.');
+          toast('Our team has been notified and will assist you.', {
+            id: 'team-notification',
+            icon: '🔔'
+          });
         } catch (err) {
           console.error('Failed to create message record:', err);
         }
@@ -943,8 +949,8 @@ Files: ${uploadedFiles.length} uploaded
 
     try {
       setIsLoggingOut(true);
-      // logout();
-      // Dynamic SDK will handle the redirect through onLogout callback
+      await signOut();
+      navigate('/sign-in');
     } catch (error) {
       console.error('Logout error:', error);
       alert('Failed to logout. Please try again.');
@@ -2307,4 +2313,3 @@ Files: ${uploadedFiles.length} uploaded
 };
 
 export default Dashboard;
-

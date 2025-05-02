@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth, useUser } from '@clerk/clerk-react';
-import { isAdmin, syncUserToAppwrite } from '@/lib/clerkClient';
+import { isAdmin, syncUserToSupabase } from '@/lib/clerkClient';
 import { Loader2 } from 'lucide-react';
 
 interface AdminProtectedRouteProps {
@@ -19,8 +19,8 @@ const AdminProtectedRoute: React.FC<AdminProtectedRouteProps> = ({ children }) =
     const checkAdminStatus = async () => {
       if (isLoaded && isSignedIn && user) {
         try {
-          // Sync user with Appwrite
-          await syncUserToAppwrite(user);
+          // Sync user with Supabase
+          await syncUserToSupabase(user);
           
           // Check if user has admin privileges
           const adminStatus = await isAdmin(user.id);

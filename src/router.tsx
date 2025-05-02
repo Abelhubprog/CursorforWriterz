@@ -128,7 +128,7 @@ const RootLayoutWithOutlet = () => {
 const Homepage = lazy(() => import('./pages/Homepage'));
 const Dashboard = lazy(() => import('./components/Dashboard/Dashboard'));
 const Profile = lazy(() => import('./pages/dashboard/Profile'));
-const Messages = lazy(() => import('./pages/dashboard/Messages'));
+const Messages = lazy(() => import('./components/Messages/MessageCenter'));
 const Orders = lazy(() => import('./pages/dashboard/Orders'));
 const Settings = lazy(() => import('./pages/dashboard/Settings'));
 const DocumentsUpload = lazy(() => import('./pages/dashboard/DocumentsUpload'));
@@ -144,7 +144,6 @@ const FAQ = lazy(() => import('./pages/FAQ'));
 const Services = lazy(() => import('./pages/Services'));
 const HowItWorks = lazy(() => import('./pages/HowItWorks'));
 const Support = lazy(() => import('./pages/Support'));
-const Blog = lazy(() => import('./pages/Blog'));
 const Payment = lazy(() => import('./pages/Payment'));
 const Login = lazy(() => import('./pages/auth/login'));
 const SignUp = lazy(() => import('./pages/auth/SignUp'));
@@ -166,10 +165,6 @@ export const router = createBrowserRouter([
   {
     path: "/",
     element: <RootLayoutWithOutlet />,
-    future: {
-      v7_startTransition: true,
-      v7_relativeSplatPath: true
-    },
     children: [
       // Public Routes
       { path: "", element: withSuspenseAndError(Homepage)() },
@@ -182,7 +177,6 @@ export const router = createBrowserRouter([
       { path: "services", element: withSuspenseAndError(Services)() },
       { path: "how-it-works", element: withSuspenseAndError(HowItWorks)() },
       { path: "support", element: withSuspenseAndError(Support)() },
-      { path: "blog", element: withSuspenseAndError(Blog)() },
       { path: "payment", element: withSuspenseAndError(Payment)() },
 
       // Service Pages

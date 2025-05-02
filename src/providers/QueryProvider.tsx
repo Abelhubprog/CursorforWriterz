@@ -14,7 +14,6 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false, // Don't refetch when tab gains focus
       refetchOnReconnect: true, // Refetch when reconnecting
       refetchOnMount: true, // Refetch when component mounts
-      suspense: false, // Don't use React suspense for now
     },
     mutations: {
       retry: 1,

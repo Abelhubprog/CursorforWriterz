@@ -1,127 +1,63 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  FiSave, 
-  FiArrowLeft, 
-  FiImage,
-  FiSettings
-} from 'react-icons/fi';
 import { supabase } from '@/lib/supabase';
+import { FiSave, FiTrash2, FiArrowLeft } from 'react-icons/fi';
 import { useToast } from '@/components/ui/toast/use-toast';
 
-type ServiceType = 'adult-health-nursing' | 'mental-health-nursing' | 'child-nursing' | 'crypto' | 'ai';
-
-interface ServiceSettings {
+interface Service {
+  id: string;
   title: string;
-  description: string;
-  bannerImage: string;
-  icon: string;
-  featuredContent: string[];
-  displayOptions: {
-    showBanner: boolean;
-    showFeaturedPosts: boolean;
-    showCategories: boolean;
-    showTags: boolean;
-    codeBlockStyle: 'default' | 'github' | 'vscode' | 'atom';
-    postsPerPage: number;
-  };
-  seo: {
-    metaTitle: string;
-    metaDescription: string;
-    keywords: string[];
-    structuredData: string;
-  };
+  slug: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  sort_order: number;
+  is_active: boolean;
 }
 
-const defaultSettings: ServiceSettings = {
-  title: '',
-  description: '',
-  bannerImage: '',
-  icon: '',
-  featuredContent: [],
-  displayOptions: {
-    showBanner: true,
-    showFeaturedPosts: true,
-    showCategories: true,
-    showTags: true,
-    codeBlockStyle: 'default',
-    postsPerPage: 10
-  },
-  seo: {
-    metaTitle: '',
-    metaDescription: '',
-    keywords: [],
-    structuredData: ''
-  }
-};
-
 const ServiceEditor: React.FC = () => {
-  const { service } = useParams<{ service: string }>();
+  const { service: serviceSlug } = useParams<{ service: string }>();
   const navigate = useNavigate();
-  const { toast } = useToast();
-  
-  const [settings, setSettings] = useState<ServiceSettings>(defaultSettings);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState('general');
+  const { toast } = useToast();
+  
+  const [service, setService] = useState<Service>({
+    id: '',
+    title: '',
+    slug: '',
+    description: '',
+    icon: '',
+    color: '#000000',
+    sort_order: 0,
+    is_active: true
+  });
 
   useEffect(() => {
-    if (!service) {
-      toast({
-        title: 'Error',
-        description: 'No service specified',
-        variant: 'destructive'
-      });
-      navigate('/admin');
-      return;
+    if (serviceSlug) {
+      fetchService();
+    } else {
+      setLoading(false);
     }
+  }, [serviceSlug]);
 
-    loadServiceSettings();
-  }, [service]);
-
-  const loadServiceSettings = async () => {
-    setLoading(true);
-    
+  const fetchService = async () => {
     try {
-      // Check if we have settings for this service in the database
       const { data, error } = await supabase
-        .from('service_settings')
+        .from('services')
         .select('*')
-        .eq('service_type', service)
+        .eq('slug', serviceSlug)
         .single();
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 is "row not found" error
-        throw error;
-      }
-
+      if (error) throw error;
       if (data) {
-        // Parse the settings from the database
-        setSettings({
-          title: data.title || defaultSettings.title,
-          description: data.description || defaultSettings.description,
-          bannerImage: data.banner_image || defaultSettings.bannerImage,
-          icon: data.icon || defaultSettings.icon,
-          featuredContent: data.featured_content || defaultSettings.featuredContent,
-          displayOptions: data.display_options || defaultSettings.displayOptions,
-          seo: data.seo || defaultSettings.seo
-        });
-      } else {
-        // Initialize with default settings and the service name
-        setSettings({
-          ...defaultSettings,
-          title: formatServiceName(service),
-          seo: {
-            ...defaultSettings.seo,
-            metaTitle: formatServiceName(service),
-            metaDescription: `HandyWriterz ${formatServiceName(service)} resources and content`
-          }
-        });
+        setService(data);
       }
     } catch (error) {
-      console.error('Error loading service settings:', error);
+      console.error('Error fetching service:', error);
       toast({
         title: 'Error',
-        description: 'Failed to load service settings',
+        description: 'Failed to load service details',
         variant: 'destructive'
       });
     } finally {
@@ -129,99 +65,89 @@ const ServiceEditor: React.FC = () => {
     }
   };
 
-  const formatServiceName = (serviceName: string): string => {
-    return serviceName
-      .split('-')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    
-    if (name.includes('.')) {
-      const [section, field] = name.split('.');
-      setSettings(prev => ({
-        ...prev,
-        [section]: {
-          ...prev[section as keyof ServiceSettings],
-          [field]: value
-        }
-      }));
-    } else {
-      setSettings(prev => ({ ...prev, [name]: value }));
-    }
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target;
+    setService(prev => ({
+      ...prev,
+      [name]: type === 'number' ? parseInt(value, 10) : value
+    }));
   };
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target;
-    
-    if (name.includes('.')) {
-      const [section, field] = name.split('.');
-      setSettings(prev => ({
-        ...prev,
-        [section]: {
-          ...prev[section as keyof ServiceSettings],
-          [field]: checked
-        }
-      }));
-    } else {
-      setSettings(prev => ({ ...prev, [name]: checked }));
+    setService(prev => ({
+      ...prev,
+      [name]: checked
+    }));
+  };
+
+  const validateForm = () => {
+    if (!service.title) {
+      toast({
+        title: 'Validation Error',
+        description: 'Title is required',
+        variant: 'destructive'
+      });
+      return false;
     }
-  };
 
-  const handleKeywordsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const keywords = e.target.value.split(',').map(k => k.trim()).filter(Boolean);
-    setSettings(prev => ({
-      ...prev,
-      seo: {
-        ...prev.seo,
-        keywords
-      }
-    }));
-  };
+    if (!service.slug) {
+      toast({
+        title: 'Validation Error',
+        description: 'Slug is required',
+        variant: 'destructive'
+      });
+      return false;
+    }
 
-  const handleFeaturedContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const ids = e.target.value.split('\n').map(id => id.trim()).filter(Boolean);
-    setSettings(prev => ({
-      ...prev,
-      featuredContent: ids
-    }));
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) return;
+
     setSaving(true);
-
     try {
-      // Save settings to the database
-      const { error } = await supabase
-        .from('service_settings')
-        .upsert({
-          service_type: service,
-          title: settings.title,
-          description: settings.description,
-          banner_image: settings.bannerImage,
-          icon: settings.icon,
-          featured_content: settings.featuredContent,
-          display_options: settings.displayOptions,
-          seo: settings.seo,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'service_type'
-        });
+      const operation = serviceSlug
+        ? supabase
+            .from('services')
+            .update({
+              title: service.title,
+              slug: service.slug,
+              description: service.description,
+              icon: service.icon,
+              color: service.color,
+              sort_order: service.sort_order,
+              is_active: service.is_active
+            })
+            .eq('id', service.id)
+        : supabase
+            .from('services')
+            .insert([{
+              title: service.title,
+              slug: service.slug,
+              description: service.description,
+              icon: service.icon,
+              color: service.color,
+              sort_order: service.sort_order,
+              is_active: service.is_active
+            }]);
 
+      const { error } = await operation;
       if (error) throw error;
 
       toast({
         title: 'Success',
-        description: 'Service settings saved successfully',
+        description: `Service ${serviceSlug ? 'updated' : 'created'} successfully`
       });
+
+      navigate('/admin/services');
     } catch (error) {
-      console.error('Error saving service settings:', error);
+      console.error('Error saving service:', error);
       toast({
         title: 'Error',
-        description: 'Failed to save service settings',
+        description: `Failed to ${serviceSlug ? 'update' : 'create'} service`,
         variant: 'destructive'
       });
     } finally {
@@ -229,420 +155,191 @@ const ServiceEditor: React.FC = () => {
     }
   };
 
+  const handleDelete = async () => {
+    if (!serviceSlug || !window.confirm('Are you sure you want to delete this service?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('services')
+        .delete()
+        .eq('slug', serviceSlug);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: 'Service deleted successfully'
+      });
+
+      navigate('/admin/services');
+    } catch (error) {
+      console.error('Error deleting service:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete service',
+        variant: 'destructive'
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-blue-600"></div>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center">
-          <button
-            type="button"
-            onClick={() => navigate('/admin/content')}
-            className="mr-4 text-gray-500 hover:text-gray-700"
-            title="Back to Content"
-          >
-            <FiArrowLeft className="h-6 w-6" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">
-              {settings.title || formatServiceName(service as string)} Settings
-            </h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Configure how the {formatServiceName(service as string)} service page appears and behaves
-            </p>
-          </div>
-        </div>
-        <div>
-          <button
-            type="submit"
-            form="service-form"
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            disabled={saving}
-          >
-            <FiSave className="-ml-1 mr-2 h-5 w-5" />
-            {saving ? 'Saving...' : 'Save Settings'}
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-white shadow rounded-lg">
-        <div className="border-b border-gray-200">
-          <div className="px-6 py-3">
-            <nav className="-mb-px flex space-x-6">
-              <button
-                className={`whitespace-nowrap pb-3 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'general'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-                onClick={() => setActiveTab('general')}
-              >
-                General
-              </button>
-              <button
-                className={`whitespace-nowrap pb-3 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'display'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-                onClick={() => setActiveTab('display')}
-              >
-                Display Options
-              </button>
-              <button
-                className={`whitespace-nowrap pb-3 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'seo'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-                onClick={() => setActiveTab('seo')}
-              >
-                SEO
-              </button>
-            </nav>
-          </div>
-        </div>
-
-        <form id="service-form" onSubmit={handleSubmit}>
-          {activeTab === 'general' && (
-            <div className="p-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-6">
-              <div className="sm:col-span-6">
-                <label htmlFor="title" className="block text-sm font-medium text-gray-700">
-                  Service Title
-                </label>
-                <div className="mt-1">
-                  <input
-                    type="text"
-                    name="title"
-                    id="title"
-                    value={settings.title}
-                    onChange={handleChange}
-                    className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                    placeholder={formatServiceName(service as string)}
-                  />
-                </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  This is the title displayed at the top of the service page.
-                </p>
-              </div>
-
-              <div className="sm:col-span-6">
-                <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-                  Service Description
-                </label>
-                <div className="mt-1">
-                  <textarea
-                    id="description"
-                    name="description"
-                    rows={4}
-                    value={settings.description}
-                    onChange={handleChange}
-                    className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                    placeholder="Describe what this service page is about..."
-                  />
-                </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  Brief description displayed below the title on the service page.
-                </p>
-              </div>
-
-              <div className="sm:col-span-6">
-                <label htmlFor="bannerImage" className="block text-sm font-medium text-gray-700">
-                  Banner Image URL
-                </label>
-                <div className="mt-1 flex rounded-md shadow-sm">
-                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 sm:text-sm">
-                    <FiImage className="h-4 w-4" />
-                  </span>
-                  <input
-                    type="text"
-                    name="bannerImage"
-                    id="bannerImage"
-                    value={settings.bannerImage}
-                    onChange={handleChange}
-                    className="flex-1 min-w-0 block w-full px-3 py-2 rounded-none rounded-r-md focus:ring-blue-500 focus:border-blue-500 sm:text-sm border-gray-300"
-                    placeholder="https://example.com/image.jpg"
-                  />
-                </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  URL for the banner image displayed at the top of the service page.
-                </p>
-              </div>
-
-              <div className="sm:col-span-6">
-                <label htmlFor="icon" className="block text-sm font-medium text-gray-700">
-                  Service Icon
-                </label>
-                <div className="mt-1 flex rounded-md shadow-sm">
-                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 sm:text-sm">
-                    <FiSettings className="h-4 w-4" />
-                  </span>
-                  <input
-                    type="text"
-                    name="icon"
-                    id="icon"
-                    value={settings.icon}
-                    onChange={handleChange}
-                    className="flex-1 min-w-0 block w-full px-3 py-2 rounded-none rounded-r-md focus:ring-blue-500 focus:border-blue-500 sm:text-sm border-gray-300"
-                    placeholder="https://example.com/icon.svg"
-                  />
-                </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  URL for the icon representing this service.
-                </p>
-              </div>
-
-              <div className="sm:col-span-6">
-                <label htmlFor="featuredContent" className="block text-sm font-medium text-gray-700">
-                  Featured Content IDs
-                </label>
-                <div className="mt-1">
-                  <textarea
-                    id="featuredContent"
-                    name="featuredContent"
-                    rows={3}
-                    value={settings.featuredContent.join('\n')}
-                    onChange={handleFeaturedContentChange}
-                    className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                    placeholder="Enter one content ID per line"
-                  />
-                </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  IDs of content to feature at the top of the service page. One ID per line.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'display' && (
-            <div className="p-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-6">
-              <div className="sm:col-span-6">
-                <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">Display Options</h3>
-                <p className="mt-1 text-sm text-gray-500 mb-6">
-                  Configure how content is displayed on the service page.
-                </p>
-              </div>
-
-              <div className="sm:col-span-3">
-                <div className="flex items-center">
-                  <input
-                    id="showBanner"
-                    name="displayOptions.showBanner"
-                    type="checkbox"
-                    checked={settings.displayOptions.showBanner}
-                    onChange={handleCheckboxChange}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="showBanner" className="ml-2 block text-sm text-gray-700">
-                    Show Banner Image
-                  </label>
-                </div>
-              </div>
-
-              <div className="sm:col-span-3">
-                <div className="flex items-center">
-                  <input
-                    id="showFeaturedPosts"
-                    name="displayOptions.showFeaturedPosts"
-                    type="checkbox"
-                    checked={settings.displayOptions.showFeaturedPosts}
-                    onChange={handleCheckboxChange}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="showFeaturedPosts" className="ml-2 block text-sm text-gray-700">
-                    Show Featured Posts
-                  </label>
-                </div>
-              </div>
-
-              <div className="sm:col-span-3">
-                <div className="flex items-center">
-                  <input
-                    id="showCategories"
-                    name="displayOptions.showCategories"
-                    type="checkbox"
-                    checked={settings.displayOptions.showCategories}
-                    onChange={handleCheckboxChange}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="showCategories" className="ml-2 block text-sm text-gray-700">
-                    Show Categories List
-                  </label>
-                </div>
-              </div>
-
-              <div className="sm:col-span-3">
-                <div className="flex items-center">
-                  <input
-                    id="showTags"
-                    name="displayOptions.showTags"
-                    type="checkbox"
-                    checked={settings.displayOptions.showTags}
-                    onChange={handleCheckboxChange}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="showTags" className="ml-2 block text-sm text-gray-700">
-                    Show Tags Cloud
-                  </label>
-                </div>
-              </div>
-
-              <div className="sm:col-span-3">
-                <label htmlFor="codeBlockStyle" className="block text-sm font-medium text-gray-700">
-                  Code Block Style
-                </label>
-                <div className="mt-1">
-                  <select
-                    id="codeBlockStyle"
-                    name="displayOptions.codeBlockStyle"
-                    value={settings.displayOptions.codeBlockStyle}
-                    onChange={handleChange}
-                    className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                  >
-                    <option value="default">Default</option>
-                    <option value="github">GitHub</option>
-                    <option value="vscode">VS Code</option>
-                    <option value="atom">Atom</option>
-                  </select>
-                </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  Style for code block syntax highlighting.
-                </p>
-              </div>
-
-              <div className="sm:col-span-3">
-                <label htmlFor="postsPerPage" className="block text-sm font-medium text-gray-700">
-                  Posts Per Page
-                </label>
-                <div className="mt-1">
-                  <input
-                    type="number"
-                    name="displayOptions.postsPerPage"
-                    id="postsPerPage"
-                    value={settings.displayOptions.postsPerPage}
-                    onChange={handleChange}
-                    min="1"
-                    max="50"
-                    className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                  />
-                </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  Number of posts to display per page.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'seo' && (
-            <div className="p-6 grid grid-cols-1 gap-y-6 gap-x-6 sm:grid-cols-6">
-              <div className="sm:col-span-6">
-                <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">SEO Settings</h3>
-                <p className="mt-1 text-sm text-gray-500 mb-6">
-                  Configure search engine optimization settings for this service page.
-                </p>
-              </div>
-
-              <div className="sm:col-span-6">
-                <label htmlFor="metaTitle" className="block text-sm font-medium text-gray-700">
-                  Meta Title
-                </label>
-                <div className="mt-1">
-                  <input
-                    type="text"
-                    name="seo.metaTitle"
-                    id="metaTitle"
-                    value={settings.seo.metaTitle}
-                    onChange={handleChange}
-                    className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                    placeholder={`HandyWriterz - ${formatServiceName(service as string)}`}
-                  />
-                </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  The title that appears in search engine results and browser tabs.
-                </p>
-              </div>
-
-              <div className="sm:col-span-6">
-                <label htmlFor="metaDescription" className="block text-sm font-medium text-gray-700">
-                  Meta Description
-                </label>
-                <div className="mt-1">
-                  <textarea
-                    id="metaDescription"
-                    name="seo.metaDescription"
-                    rows={3}
-                    value={settings.seo.metaDescription}
-                    onChange={handleChange}
-                    className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                    placeholder={`HandyWriterz ${formatServiceName(service as string)} resources and content`}
-                  />
-                </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  A brief description of the page that appears in search engine results.
-                </p>
-              </div>
-
-              <div className="sm:col-span-6">
-                <label htmlFor="keywords" className="block text-sm font-medium text-gray-700">
-                  Keywords
-                </label>
-                <div className="mt-1">
-                  <input
-                    type="text"
-                    id="keywords"
-                    value={settings.seo.keywords.join(', ')}
-                    onChange={handleKeywordsChange}
-                    className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md"
-                    placeholder="handywriterz, nursing, healthcare, education"
-                  />
-                </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  Comma-separated keywords for search engine optimization.
-                </p>
-              </div>
-
-              <div className="sm:col-span-6">
-                <label htmlFor="structuredData" className="block text-sm font-medium text-gray-700">
-                  Structured Data JSON
-                </label>
-                <div className="mt-1">
-                  <textarea
-                    id="structuredData"
-                    name="seo.structuredData"
-                    rows={6}
-                    value={settings.seo.structuredData}
-                    onChange={handleChange}
-                    className="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md font-mono"
-                    placeholder='{"@context": "https://schema.org", "@type": "WebPage", ...}'
-                  />
-                </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  Optional JSON-LD structured data for rich search results.
-                </p>
-              </div>
-            </div>
-          )}
-
-          <div className="px-6 py-4 bg-gray-50 rounded-b-lg flex items-center justify-end">
+    <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <div className="md:flex md:items-center md:justify-between mb-8">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center">
             <button
-              type="submit"
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              disabled={saving}
+              onClick={() => navigate(-1)}
+              className="mr-4 p-2 text-gray-500 hover:text-gray-700 rounded-full hover:bg-gray-100"
+              aria-label="Go back"
             >
-              <FiSave className="-ml-1 mr-2 h-5 w-5" />
-              {saving ? 'Saving...' : 'Save Settings'}
+              <FiArrowLeft className="h-5 w-5" />
             </button>
+            <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:truncate">
+              {serviceSlug ? 'Edit Service' : 'Create New Service'}
+            </h2>
           </div>
-        </form>
+        </div>
       </div>
+
+      <form onSubmit={handleSubmit} className="space-y-8">
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="grid grid-cols-1 gap-6">
+            <div>
+              <label htmlFor="title" className="block text-sm font-medium text-gray-700">
+                Title
+              </label>
+              <input
+                type="text"
+                id="title"
+                name="title"
+                value={service.title}
+                onChange={handleChange}
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="slug" className="block text-sm font-medium text-gray-700">
+                Slug
+              </label>
+              <input
+                type="text"
+                id="slug"
+                name="slug"
+                value={service.slug}
+                onChange={handleChange}
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                Description
+              </label>
+              <textarea
+                id="description"
+                name="description"
+                rows={3}
+                value={service.description || ''}
+                onChange={handleChange}
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="icon" className="block text-sm font-medium text-gray-700">
+                Icon (class name or URL)
+              </label>
+              <input
+                type="text"
+                id="icon"
+                name="icon"
+                value={service.icon || ''}
+                onChange={handleChange}
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="color" className="block text-sm font-medium text-gray-700">
+                Color
+              </label>
+              <input
+                type="color"
+                id="color"
+                name="color"
+                value={service.color || '#000000'}
+                onChange={handleChange}
+                className="mt-1 block w-full h-10 border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="sort_order" className="block text-sm font-medium text-gray-700">
+                Sort Order
+              </label>
+              <input
+                type="number"
+                id="sort_order"
+                name="sort_order"
+                value={service.sort_order}
+                onChange={handleChange}
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              />
+            </div>
+
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="is_active"
+                name="is_active"
+                checked={service.is_active}
+                onChange={handleCheckboxChange}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="is_active" className="ml-2 block text-sm text-gray-700">
+                Active
+              </label>
+            </div>
+          </div>
+
+          <div className="mt-6 flex items-center justify-between">
+            <div className="flex">
+              <button
+                type="submit"
+                disabled={saving}
+                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <FiSave className="-ml-1 mr-2 h-5 w-5" />
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+
+            {serviceSlug && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              >
+                <FiTrash2 className="-ml-1 mr-2 h-5 w-5" />
+                Delete
+              </button>
+            )}
+          </div>
+        </div>
+      </form>
     </div>
   );
 };
 
-export default ServiceEditor; 
+export default ServiceEditor;

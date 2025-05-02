@@ -1,66 +1,28 @@
-import { LucideIcon } from 'lucide-react';
+import { ReactNode } from 'react';
 
-export interface ServiceConfig {
+export interface ServiceMetadata {
+  author?: string;
+  date?: string;
+  category?: string;
+  tags?: string[];
+}
+
+export interface ServicePageProps {
+  title: string;
+  description?: string;
+  content?: ReactNode;
+  metadata?: ServiceMetadata;
+  children?: ReactNode;
+}
+
+export interface ServicePageType {
   id: string;
   title: string;
-  description: string;
-  path: string;
-  icon: LucideIcon;
-  color: {
-    bg: string;
-    text: string;
-    gradient: {
-      from: string;
-      to: string;
-    };
-  };
-}
-
-export interface Post {
-  id: number;
-  title: string;
-  content: string;
-  author: string;
-  date: string;
-  category: string;
-  readTime: string;
-  resourceLinks: string[];
-  status: 'draft' | 'published' | 'archived';
-}
-
-export interface Resource {
-  id: string;
-  title: string;
-  type: 'pdf' | 'video' | 'template' | 'guide';
-  url: string;
-  downloadCount: number;
-}
-
-export interface Course {
-  id: string;
-  title: string;
-  description: string;
-  duration: string;
-  level: 'Beginner' | 'Intermediate' | 'Advanced';
-  enrollmentCount: number;
-}
-
-export interface FAQ {
-  question: string;
-  answer: string;
-}
-
-export interface ServicePageData {
-  serviceTitle: string;
-  serviceDescription: string;
-  keyFeatures: {
-    title: string;
-    description: string;
-    icon: React.ReactNode;
-  }[];
-  resources: Resource[];
-  courses: Course[];
-  posts: Post[];
-  faqs: FAQ[];
-  isAdmin?: boolean;
+  slug: string;
+  description?: string;
+  content?: string;
+  metadata?: ServiceMetadata;
+  status: 'draft' | 'published';
+  createdAt: string;
+  updatedAt: string;
 }

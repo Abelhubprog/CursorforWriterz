@@ -416,7 +416,7 @@ const TurnitinCheck: React.FC = () => {
     setIsPaid(true);
     updateStepStatus(currentStep, true);
     goToNextStep();
-    generateReceipt();
+    generateReceiptId();
   };
 
   // Replace PayPal specific handlers with generic ones

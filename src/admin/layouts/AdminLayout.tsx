@@ -32,6 +32,7 @@ const navigation: NavItem[] = [
     submenu: [
       { title: 'All Content', path: '/admin/content', icon: FiFileText },
       { title: 'Add New', path: '/admin/content/new', icon: FiFileText },
+      { title: 'Services', path: '/admin/services', icon: FiFileText },
       { title: 'Categories', path: '/admin/categories', icon: FiFileText },
     ]
   },
@@ -252,4 +253,4 @@ const AdminLayout: React.FC = () => {
   );
 };
 
-export default AdminLayout; 
+export default AdminLayout;

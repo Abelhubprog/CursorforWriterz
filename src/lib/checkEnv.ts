@@ -8,8 +8,9 @@
 export function checkRequiredEnvVars() {
   // List of required env variables
   const requiredVars = [
-    'VITE_APPWRITE_ENDPOINT',
-    'VITE_APPWRITE_PROJECT_ID'
+    'VITE_SUPABASE_URL',
+    'VITE_SUPABASE_ANON_KEY',
+    'VITE_CLERK_PUBLISHABLE_KEY'
   ];
   
   // Check each variable

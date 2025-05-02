@@ -1,6 +1,7 @@
 import { ClerkProvider as BaseClerkProvider } from '@clerk/clerk-react';
 import { dark } from '@clerk/themes';
 import { useTheme } from '@/hooks/useTheme';
+import { toast } from 'react-hot-toast';
 
 if (!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY) {
   throw new Error('Missing Clerk Publishable Key');

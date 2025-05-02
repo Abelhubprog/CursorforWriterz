@@ -46,11 +46,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   
+  console.log('AdminAuthProvider rendering');
+  
   useEffect(() => {
     const initialize = async () => {
+      console.log('AdminAuthProvider initializing');
       try {
         // Get current session
         const { data } = await supabase.auth.getSession();
+        console.log('Auth session check:', data.session ? 'Session exists' : 'No session');
         setSession(data.session);
         
         if (data.session?.user) {
@@ -73,7 +77,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         }
       } catch (error) {
-        console.error('Error initializing auth:', error);
+        console.error('Auth initialization error:', error);
       } finally {
         setIsLoading(false);
       }

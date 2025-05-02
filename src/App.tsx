@@ -1,52 +1,33 @@
+/**
+ * Main App Component (DEPRECATED)
+ * 
+ * NOTE: This component is no longer the main entry point.
+ * Routing is now handled via createBrowserRouter in router.tsx which is configured in main.tsx
+ * 
+ * @deprecated Use router.tsx for route definitions instead
+ */
+
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
-import { SupabaseProvider } from '@/providers/SupabaseProvider';
-import AdminLogin from './pages/auth/admin-login';
-import AdminRoutes from './admin/Routes';
+import { SupabaseProvider } from './providers/SupabaseProvider';
 import { AuthProvider as AdminAuthProvider } from './admin/components/hooks/useAuth';
+import Homepage from './pages/Homepage';
 
-// Add error handlers
-if (typeof window !== 'undefined') {
-  // Runtime error handler
-  window.addEventListener('error', (event) => {
-    console.error('Runtime error:', event.error);
-  });
-
-  // Unhandled promise rejection handler
-  window.addEventListener('unhandledrejection', (event) => {
-    console.error('Unhandled promise rejection:', event.reason);
-  });
-}
-
-const App: React.FC = () => {
+/**
+ * App component wrapper - provides context providers
+ * This component is no longer used for routing
+ */
+const App: React.FC = React.memo(() => {
+  console.log('App is rendering, but this component is DEPRECATED');
+  
+  // Simply render the Homepage component directly
+  // This is only kept for backward compatibility
   return (
     <SupabaseProvider>
-      {/* Wrap admin routes in AdminAuthProvider to avoid conflict with main app's AuthProvider */}
       <AdminAuthProvider>
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 3000,
-            style: {
-              background: 'var(--background)',
-              color: 'var(--foreground)',
-              border: '1px solid var(--border)',
-            },
-          }} 
-        />
-        
-        <Routes>
-          {/* Admin routes with their own layout */}
-          <Route path="/admin/*" element={<AdminRoutes />} />
-          <Route path="/auth/admin-login" element={<AdminLogin />} />
-          
-          {/* Redirect any other paths to the main router */}
-          <Route path="/*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <Homepage />
       </AdminAuthProvider>
     </SupabaseProvider>
   );
-};
+});
 
 export default App;
